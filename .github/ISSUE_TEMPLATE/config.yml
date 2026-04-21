@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/OWNER/signal/discussions
+    about: For questions, show & tell, and ideas not yet ready to be an issue.
+  - name: Security vulnerability
+    url: https://github.com/OWNER/signal/security/advisories/new
+    about: Do not open a public issue — report privately via a security advisory.

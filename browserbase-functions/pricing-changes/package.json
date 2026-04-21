@@ -1,0 +1,20 @@
+{
+  "name": "pricing-changes-fn",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Scrapes a company's /pricing page and extracts tiers. Deployed to Browserbase Functions.",
+  "scripts": {
+    "dev": "bb functions dev index.ts",
+    "publish": "bb functions publish index.ts"
+  },
+  "dependencies": {
+    "@browserbasehq/sdk-functions": "^1.0.1",
+    "playwright-core": "^1.59.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3"
+  }
+}

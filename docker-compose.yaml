@@ -1,0 +1,43 @@
+# Signal self-host.
+#
+# This compose file runs the Next.js app only. Bring your own Supabase —
+# either a hosted project (https://supabase.com) or a local stack via
+# `supabase start`.
+#
+# Minimal setup:
+#   cp .env.example .env
+#   # fill in SUPABASE_* and ANTHROPIC_API_KEY at minimum
+#   docker compose up -d
+#
+# The app will be reachable at http://localhost:3000.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Build-time env (inlined into the client bundle).
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    image: signal:latest
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

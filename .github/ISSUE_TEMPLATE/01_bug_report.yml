@@ -1,0 +1,91 @@
+name: Bug report
+description: Something isn't working the way it should.
+title: "[Bug]: "
+labels: ["type: bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. The more reproducible the report, the faster it gets fixed.
+
+  - type: checkboxes
+    id: duplicate-check
+    attributes:
+      label: Duplicate check
+      options:
+        - label: I searched existing issues and this bug is not already reported.
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What's happening? What did you expect to happen?
+      placeholder: |
+        When I click "Send sequence" the UI spins indefinitely and no email is sent.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Numbered steps someone else can follow.
+      placeholder: |
+        1. Create a campaign
+        2. Add one contact
+        3. Draft a sequence
+        4. Click "Send"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include error messages, stack traces, screenshots.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows (WSL)
+        - Windows (native)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: Output of `node --version`
+      placeholder: v20.18.0
+    validations:
+      required: true
+
+  - type: input
+    id: signal-version
+    attributes:
+      label: Signal version / commit
+      description: Git SHA or release tag you're running against.
+      placeholder: main@abc1234
+
+  - type: checkboxes
+    id: willing-to-pr
+    attributes:
+      label: Willing to submit a PR?
+      options:
+        - label: I'd be willing to contribute a fix for this bug.

@@ -1,0 +1,4 @@
+-- Signal local dev seed data.
+-- This file is applied by `supabase db reset` after migrations.
+-- Add seed rows here (e.g. test users, sample campaigns) — Signal ships with
+-- no seed data by default so migrations stay the only source of schema truth.
