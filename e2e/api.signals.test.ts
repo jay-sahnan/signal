@@ -8,11 +8,8 @@ import {
   cleanupTestUsers,
   createTestUser,
   setDefaultTestOwner,
-  authedFetch,
   type TestUser,
 } from "./helpers";
-
-const BASE = "http://localhost:3000";
 
 let testUser: TestUser;
 

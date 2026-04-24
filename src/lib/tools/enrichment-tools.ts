@@ -13,7 +13,6 @@ import {
   linkPersonToCampaign,
   mergeEnrichmentData,
   isRecentlyEnriched,
-  normalizeDomain,
   normalizeLinkedInUrl,
 } from "@/lib/services/knowledge-base";
 import {

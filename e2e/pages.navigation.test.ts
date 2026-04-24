@@ -11,7 +11,6 @@ import {
   setDefaultTestOwner,
   authCookiesFor,
   TEST_PREFIX,
-  supabase,
   type TestUser,
 } from "./helpers";
 

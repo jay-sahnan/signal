@@ -24,7 +24,6 @@ import { parseLinkedInTitle } from "@/lib/utils";
 export const maxDuration = 120;
 
 /** Signal slugs that map to company-level enrichment operations */
-const SIGNAL_SLUG_WEBSITE = "website-tech-stack";
 const SIGNAL_SLUG_PRODUCT = "product-launches";
 const SIGNAL_SLUG_FUNDING = "funding-news";
 const SIGNAL_SLUG_EXECUTIVE = "executive-changes";

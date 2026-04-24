@@ -164,14 +164,20 @@ export class ExaService {
 
     console.log(`[Exa] Searching: "${query}" (type: ${searchType})`);
 
+    // Local SearchType/SearchCategory include values ("deep", "tweet") that
+    // exa-js's newer narrowed types don't accept; cast through unknown so the
+    // SDK call compiles while the upstream types catch up.
     const results = await withTimeout(
       includeText
         ? this.exa.searchAndContents(query, {
             ...searchOptions,
             text: true,
             context: { maxCharacters: 10000 },
-          })
-        : this.exa.search(query, searchOptions),
+          } as unknown as Parameters<typeof this.exa.searchAndContents>[1])
+        : this.exa.search(
+            query,
+            searchOptions as unknown as Parameters<typeof this.exa.search>[1],
+          ),
       TIMEOUT_MS,
       `Exa search for "${query}"`,
     );

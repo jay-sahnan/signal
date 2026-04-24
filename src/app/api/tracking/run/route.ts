@@ -1,7 +1,6 @@
 import { getAdminClient } from "@/lib/supabase/admin";
 import { verifyQStashSignature, getBaseUrl } from "@/lib/services/qstash";
 import { withAction } from "@/lib/services/cost-tracker";
-import { scrapeHiringData } from "@/lib/services/hiring-scraper";
 import { executeSignal } from "@/lib/signals/executor";
 import type { Signal } from "@/lib/types/signal";
 import {
@@ -57,7 +56,6 @@ export async function POST(request: Request) {
     };
   };
 
-  const signalSlug = typedConfig.signal.slug as string;
   const orgName =
     (typedConfig.organization?.name as string) || "Unknown Company";
   const orgDomain = typedConfig.organization?.domain as string | undefined;
