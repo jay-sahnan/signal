@@ -74,7 +74,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.1",
     "dotenv": "^17.4.2",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.1.6",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
