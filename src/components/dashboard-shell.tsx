@@ -6,6 +6,7 @@ import { MessageCircle, X } from "lucide-react";
 import { AgentPanel } from "@/components/agent-panel";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
+import { KeylessBanner } from "@/components/keyless-banner";
 import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
@@ -53,6 +54,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset className="max-h-dvh overflow-hidden">
+          <KeylessBanner />
           <header className="bg-background/50 sticky top-0 z-50 flex h-12 shrink-0 items-center gap-2 border-b px-4 backdrop-blur-md lg:px-6">
             <div className="flex w-full items-center justify-between">
               <div className="flex items-center gap-1 lg:gap-2">

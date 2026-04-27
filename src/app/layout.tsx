@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { GeistMono } from "geist/font/mono";
+import { ClerkProvider } from "@clerk/nextjs";
+import { shadcn } from "@clerk/ui/themes";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -28,19 +30,21 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${GeistMono.variable} font-sans antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <StreamingProvider>
-            <TooltipProvider>
-              <DashboardShell>{children}</DashboardShell>
-              <Toaster richColors />
-            </TooltipProvider>
-          </StreamingProvider>
-        </ThemeProvider>
+        <ClerkProvider appearance={{ theme: shadcn }}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <StreamingProvider>
+              <TooltipProvider>
+                <DashboardShell>{children}</DashboardShell>
+                <Toaster richColors />
+              </TooltipProvider>
+            </StreamingProvider>
+          </ThemeProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

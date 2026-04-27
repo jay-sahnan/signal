@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
+import { useAuth } from "@clerk/nextjs";
 
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,7 +10,6 @@ import { CostCenter } from "@/components/settings/cost-center";
 import { EmailSettings } from "@/components/settings/email-settings";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { EmailSkillsAttacher } from "@/components/email-skills/email-skills-attacher";
-import { createClient } from "@/lib/supabase/client";
 
 const noop = () => () => {};
 const getTrue = () => true;
@@ -38,25 +38,7 @@ function DarkModeToggle() {
 }
 
 export default function SettingsPage() {
-  const [userId, setUserId] = useState<string | null>(null);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-
-    const fetchUser = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (mountedRef.current) setUserId(user?.id ?? null);
-    };
-
-    fetchUser();
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const { userId } = useAuth();
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -79,7 +61,7 @@ export default function SettingsPage() {
             <EmailSettings />
             <EmailSkillsAttacher
               scopeType="user"
-              scopeId={userId}
+              scopeId={userId ?? null}
               title="Default email skills"
               description="Markdown rule packs applied to every email you draft, across all campaigns."
               unscopedMessage="Signing in…"

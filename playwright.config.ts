@@ -5,6 +5,7 @@ dotenv.config({ path: ".env.local" });
 
 export default defineConfig({
   testDir: "./e2e",
+  globalSetup: "./e2e/global-setup.ts",
   timeout: 30_000,
   retries: 0,
   workers: 1, // sequential -- tests share DB state

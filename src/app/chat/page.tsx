@@ -12,6 +12,7 @@ import {
   deleteChat,
   listChats,
 } from "@/lib/services/chat-history";
+import { createClient } from "@/lib/supabase/client";
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -33,7 +34,8 @@ export default function ChatPage() {
 
   useEffect(() => {
     mountedRef.current = true;
-    listChats(50)
+    const supabase = createClient();
+    listChats(supabase, 50)
       .then((data) => {
         if (mountedRef.current) {
           setChats(data);
@@ -112,7 +114,7 @@ export default function ChatPage() {
                     className="text-muted-foreground hover:text-destructive h-7 w-7 shrink-0 opacity-60 transition-opacity hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                     onClick={(e) => {
                       e.preventDefault();
-                      deleteChat(chat.id)
+                      deleteChat(createClient(), chat.id)
                         .then(() =>
                           setChats((prev) =>
                             prev.filter((c) => c.id !== chat.id),

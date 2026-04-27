@@ -35,6 +35,8 @@ It's built for teams that want a CRM-adjacent tool they can read, fork, self-hos
 
 > 🧪 Signal is designed for single-tenant self-hosting — one Supabase project per team. See [architecture.md](./docs/architecture.md#multi-tenancy) before deploying for multiple independent teams.
 
+> ⚠️ **Upgrading from a pre-Clerk version?** Auth has migrated from Supabase Auth to Clerk (Supabase remains the data layer). **Take a `pg_dump` first — this migration is destructive and not reversible.** It **wipes all user-owned data** (`campaigns`, `chats`, `user_profile`, `api_usage`, `user_settings`, `email_drafts`, `sent_emails`, `sequences`, plus user-authored `email_skills`) — old Supabase user UUIDs don't map to Clerk IDs. Built-in seed data and shared pools (`organizations`, `people`, `signals`) survive. Sign up for a free Clerk account ([10k MAU free](https://clerk.com/pricing)) and run `pnpm setup` to wire it up. See [docs/setup.md § Clerk](./docs/setup.md#4-clerk-auth) and [`supabase/migrations/20260427000000_clerk_auth_migration.sql`](./supabase/migrations/20260427000000_clerk_auth_migration.sql) if you need a custom backfill.
+
 <br />
 
 ## ✨ Features
@@ -114,7 +116,6 @@ Looking for somewhere to start? Filter issues by [`good first issue`](../../labe
 - 🔒 [Security](./.github/SECURITY.md) — vulnerability disclosure
 
 <br />
-
 
 <br /><br />
 

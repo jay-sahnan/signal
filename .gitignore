@@ -64,3 +64,6 @@ yarn.lock
 
 # scripts scratch state
 /scripts/.*-progress.json
+
+# clerk configuration (can include secrets)
+/.clerk/

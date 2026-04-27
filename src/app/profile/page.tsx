@@ -15,6 +15,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { EmailSkillsAttacher } from "@/components/email-skills/email-skills-attacher";
 import { createClient } from "@/lib/supabase/client";
+import { useUser } from "@clerk/nextjs";
 import { profileDisplayName } from "@/lib/types/profile";
 import type { UserProfile, ProfileFormData } from "@/lib/types/profile";
 
@@ -33,6 +34,7 @@ const emptyForm: ProfileFormData = {
 };
 
 export default function ProfilePage() {
+  const { user: clerkUser } = useUser();
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<ProfileFormData>(emptyForm);
@@ -114,13 +116,14 @@ export default function ProfilePage() {
         );
         toast.success("Profile saved");
       } else {
-        const {
-          data: { user: authUser },
-        } = await supabase.auth.getUser();
-
+        if (!clerkUser?.id) {
+          toast.error("Still signing in — try again in a moment");
+          setSaving(false);
+          return;
+        }
         const { data, error } = await supabase
           .from("user_profile")
-          .insert({ ...payload, user_id: authUser?.id })
+          .insert({ ...payload, user_id: clerkUser.id })
           .select("*")
           .single();
         if (error) throw error;
