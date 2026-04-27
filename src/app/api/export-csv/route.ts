@@ -109,9 +109,9 @@ export async function GET(request: Request) {
     }
   }
 
-  // CSV header
+  // CSV header — includes score for Smartlead priority sorting
   const header =
-    "company,signal,contact_name,contact_title,email,linkedin,suggested_path,personalised_email,personalised_linkedin,creative_play";
+    "company,score,signal,contact_name,contact_title,email,linkedin,suggested_path,personalised_email,personalised_linkedin,creative_play";
 
   const csvRows: string[] = [];
 
@@ -127,71 +127,98 @@ export async function GET(request: Request) {
     const contacts = contactMap.get(orgId) ?? [];
 
     // Build signal-aware messages directly from the data
+    const sl = signal.toLowerCase();
     const hasRegulatory =
-      signal.toLowerCase().includes("regulatory") ||
-      signal.toLowerCase().includes("cfpb") ||
-      signal.toLowerCase().includes("consent order");
+      sl.includes("consent order") ||
+      sl.includes("enforcement") ||
+      sl.includes("cfpb") ||
+      sl.includes("regulatory");
     const hasTrustpilot =
-      signal.toLowerCase().includes("trustpilot") ||
-      signal.toLowerCase().includes("complaint");
+      sl.includes("trustpilot") ||
+      sl.includes("review deterioration") ||
+      sl.includes("rising cfpb complaint") ||
+      sl.includes("complaint");
+    const hasNewLeader =
+      sl.includes("leader hired") ||
+      sl.includes("new compliance") ||
+      sl.includes("appointed");
+    const hasPE =
+      sl.includes("pe acquisition") ||
+      sl.includes("ownership change") ||
+      sl.includes("acquired");
     const hasHiring =
-      signal.toLowerCase().includes("hiring") ||
-      signal.toLowerCase().includes("cx");
-    const hasAI =
-      signal.toLowerCase().includes("ai agent") ||
-      signal.toLowerCase().includes("ai chatbot");
+      sl.includes("job posting") ||
+      sl.includes("hiring") ||
+      sl.includes("cx team scaling");
+    const hasAI = sl.includes("ai agent") || sl.includes("ai chatbot");
+    const hasUDAAP = sl.includes("udaap") || sl.includes("sales practice");
     function makeEmail(firstName: string): string {
-      if (presetSlug === "complaints" || presetSlug === "sales-compliance") {
-        if (hasRegulatory) {
-          return `Hi ${firstName || "there"},\n\nThe recent regulatory activity around ${companyName} caught my attention. The pattern we see with lenders in similar situations is that complaint detection is the root issue — agents manually log maybe 30% of actual dissatisfaction. The rest goes undetected until it compounds into enforcement.\n\nWe built Rulebase specifically for this — AI that detects every complaint across every call, with auditable evidence.\n\nWorth 15 minutes?`;
-        }
-        if (hasTrustpilot) {
-          return `Hi ${firstName || "there"},\n\n${companyName}'s Trustpilot has been rough lately — and from what we've seen, public complaints are usually the tip of the iceberg. Most lenders only catch complaints agents manually log.\n\nRulebase detects the other 70% automatically across every call.\n\nOpen to a quick look?`;
-        }
-        return `Hi ${firstName || "there"},\n\nMost lenders we talk to are only catching complaints that agents manually flag — which is maybe 30% of actual dissatisfaction. The rest compounds silently until it becomes a regulatory issue.\n\nWe built Rulebase to catch 100% automatically. Relevant for ${companyName}?`;
+      const name = firstName || "there";
+      // Route by signal — the signal IS the reason to write
+      if (hasRegulatory) {
+        return `Hi ${name},\n\nThe recent regulatory activity around ${companyName} caught my attention. The pattern we see: complaint detection is almost always the root cause. Agents manually log maybe 30% of actual dissatisfaction — the rest goes undetected until it compounds into enforcement.\n\nWe built Rulebase for exactly this — AI that detects every complaint across every call, with auditable evidence.\n\nWorth 15 minutes?`;
       }
-      // QA
+      if (hasTrustpilot) {
+        return `Hi ${name},\n\n${companyName}'s public reviews paint a picture — and what we consistently see is that reviews are just the tip. For every Trustpilot complaint, there are 5-10 expressions of dissatisfaction buried in calls that never get logged.\n\nRulebase surfaces all of them automatically. No manual tagging, no missed complaints.\n\nOpen to a quick look?`;
+      }
+      if (hasNewLeader) {
+        return `Hi ${name},\n\nFirst 90 days in a new role is when you audit what's actually happening vs what people tell you. Most leaders discover QA covers 1-3% of conversations and complaint detection is manual.\n\nRulebase gives you full visibility — 100% conversation evaluation — from day one.\n\nWorth 15 min to see if it's relevant for ${companyName}?`;
+      }
+      if (hasPE) {
+        return `Hi ${name},\n\nPost-acquisition, the compliance picture is always murkier than expected. New ownership wants clean books — but most lenders can only show compliance coverage on 2-3% of conversations.\n\nRulebase monitors 100% with auditable evidence. Makes the risk quantifiable.\n\nRelevant for what ${companyName} is going through?`;
+      }
+      if (hasUDAAP) {
+        return `Hi ${name},\n\nSales reps skip or botch required disclosures on roughly 10-15% of calls. At ${companyName}'s scale, that's hundreds of violations per month nobody catches until an examiner does.\n\nRulebase listens to every call and flags the gaps in real time.\n\nRelevant?`;
+      }
       if (hasAI) {
-        return `Hi ${firstName || "there"},\n\nSaw ${companyName} is deploying AI for CX — which raises a question most teams hit next: who QAs the AI? Manual sampling doesn't work when half your conversations are AI-handled.\n\nRulebase evaluates 100% of both human and AI conversations. Worth a look?`;
+        return `Hi ${name},\n\nSaw ${companyName} is deploying AI for CX — which raises a question most teams hit next: who QAs the AI? Manual sampling doesn't work when half your conversations are AI-handled.\n\nRulebase evaluates 100% of both human and AI conversations. Worth a look?`;
       }
       if (hasHiring) {
-        return `Hi ${firstName || "there"},\n\nNoticed ${companyName} is building out the CX team. The first thing new CX leaders find is that QA covers 1-3% of conversations — not enough to spot systemic issues.\n\nRulebase gets you to 100% in days. Worth 15 min?`;
+        return `Hi ${name},\n\nNoticed ${companyName} is building out the CX/compliance team. The first thing new leaders find is that QA covers 1-3% of conversations — not enough to spot systemic issues.\n\nRulebase gets you to 100% in days. Worth 15 min?`;
       }
-      return `Hi ${firstName || "there"},\n\nMost CX teams we talk to are reviewing 1-3% of conversations. Rulebase evaluates 100% automatically and surfaces the patterns manual QA misses.\n\nRelevant for ${companyName}?`;
+      if (presetSlug === "complaints" || presetSlug === "sales-compliance") {
+        return `Hi ${name},\n\nMost lenders we talk to are only catching complaints that agents manually flag — which is maybe 30% of actual dissatisfaction. The rest compounds silently.\n\nWe built Rulebase to catch 100% automatically. Relevant for ${companyName}?`;
+      }
+      return `Hi ${name},\n\nMost CX teams review 1-3% of conversations. Rulebase evaluates 100% automatically and surfaces the patterns manual QA misses.\n\nRelevant for ${companyName}?`;
     }
 
     function makeLinkedIn(firstName: string): string {
+      const name = firstName || "there";
       if (hasRegulatory)
-        return `Hi ${firstName || "there"} — saw ${companyName} in the regulatory news. We help lenders detect 100% of complaints before they compound. Would love to connect.`;
+        return `Hi ${name} — saw the CFPB activity around ${companyName}. We help lenders catch the complaints that lead to enforcement before they compound. Thought it might be timely.`;
       if (hasTrustpilot)
-        return `Hi ${firstName || "there"} — noticed ${companyName}'s Trustpilot reviews. We help catch the 70% of complaints agents miss. Would love to connect.`;
+        return `Hi ${name} — noticed ${companyName}'s reviews. We help catch the 70% of complaints agents miss. Would love to connect.`;
+      if (hasNewLeader)
+        return `Hi ${name} — congrats on the new role at ${companyName}. Most leaders discover QA covers 1-3% of conversations. We fix that from day one. Worth connecting?`;
+      if (hasPE)
+        return `Hi ${name} — saw the ownership change at ${companyName}. New owners usually want compliance risk quantified. We make that visible. Worth connecting?`;
+      if (hasUDAAP)
+        return `Hi ${name} — ${companyName} has the kind of sales operation examiners focus on. We make sure every call is clean. Worth connecting?`;
       if (hasAI)
-        return `Hi ${firstName || "there"} — saw ${companyName} is deploying AI for CX. We solve the QA gap for AI conversations. Would love to connect.`;
+        return `Hi ${name} — saw ${companyName} is deploying AI for CX. We solve the QA gap for AI conversations. Would love to connect.`;
       if (hasHiring)
-        return `Hi ${firstName || "there"} — noticed ${companyName} is scaling CX. We help teams maintain quality at scale with 100% QA coverage. Would love to connect.`;
-      return `Hi ${firstName || "there"} — ${companyName} came up in our research. We help teams monitor 100% of customer conversations. Would love to connect.`;
+        return `Hi ${name} — noticed ${companyName} is scaling CX/compliance. We help teams maintain quality at scale. Would love to connect.`;
+      return `Hi ${name} — ${companyName} came up in our research. We help teams monitor 100% of conversations. Would love to connect.`;
     }
 
     function makeCreative(firstName: string): string {
       const who = firstName || "the CCO";
-      if (presetSlug === "complaints") {
-        if (hasRegulatory)
-          return `Send a "Compliance Survival Kit" to ${who} at ${companyName} HQ — box with a branded stress ball, one-pager "The 70% Problem: What Your Agents Aren't Logging," QR to a 3-min Loom demo. Handwritten note: "Thought this might be useful given what's been happening. — Gideon"`;
-        if (hasTrustpilot)
-          return `Print ${companyName}'s top 5 worst Trustpilot reviews on cards. Back of each: "Rulebase would have caught this before it went public." Mail to ${who} with sticky note: "These are just the ones who bothered to post. — Gideon" + Calendly link.`;
-        return `Send a dozen cupcakes from a bakery near ${companyName}'s HQ. Each has a tiny "1 in 3" flag. Card: "You're only catching 1 in 3 complaints. Let us show you the other two. — Gideon @ Rulebase" + Calendly.`;
-      }
-      if (presetSlug === "sales-compliance") {
-        if (hasRegulatory)
-          return `Create a "CFPB Exam Prep Box" — branded folder: (1) top 5 UDAAP violations this year, (2) mock exam checklist "What Examiners Actually Ask For," (3) USB with 5-min Rulebase demo. FedEx to ${who} at ${companyName}. Cover: "For when the examiner calls." Note: "No sales pitch — just useful. — Gideon"`;
-        return `Rent a mobile billboard truck past ${companyName}'s HQ for one morning: "10-15% of your sales calls have compliance gaps. We can prove it." + QR code. Send ${who} a photo: "Not subtle. But neither are CFPB fines. 15 min? — Gideon" (Top 3 targets only.)`;
-      }
-      // QA
+      // Route by top signal
+      if (hasRegulatory)
+        return `Send a "Compliance Survival Kit" to ${who} at ${companyName} HQ — box with a branded stress ball, one-pager "The 70% Problem: What Your Agents Aren't Logging," QR to a 3-min Loom demo. Handwritten note: "Thought this might be useful given what's been happening. — Gideon"`;
+      if (hasTrustpilot)
+        return `Print ${companyName}'s top 5 worst Trustpilot reviews on cards. Back of each: "Rulebase would have caught this before it went public." Mail to ${who} with sticky note: "These are just the ones who bothered to post. — Gideon" + Calendly link.`;
+      if (hasNewLeader)
+        return `Send a "New Leader Starter Pack" to ${who} at ${companyName} — branded notebook + one-pager: "5 Questions Every New CCO / CX Leader Asks in Week 1." QR to Calendly. Note: "For the audit you're probably already running. — Gideon"`;
+      if (hasPE)
+        return `Send a "Due Diligence Kit" — folder with: "Compliance Risk Scorecard for Lenders Post-Acquisition" one-pager + sample Rulebase audit report. FedEx to ${who} at ${companyName}. Note: "For the conversation you're probably already having. — Gideon"`;
+      if (hasUDAAP)
+        return `Create a "CFPB Exam Prep Box" — branded folder: (1) top 5 UDAAP violations this year, (2) mock exam checklist. FedEx to ${who} at ${companyName}. Note: "For when the examiner calls. — Gideon"`;
       if (hasAI)
-        return `Send a "Robot Report Card" to ${who} at ${companyName} — novelty report card grading their AI agent: Communication A-, Accuracy ?, Compliance ?, Empathy C+. Inside: "Your AI handles thousands of conversations. Who's grading them? — Gideon @ Rulebase" + Calendly.`;
+        return `Send a "Robot Report Card" to ${who} at ${companyName} — novelty report card grading their AI agent: Communication A-, Accuracy ?, Compliance ?, Empathy C+. Inside: "Who's grading them? — Gideon @ Rulebase" + Calendly.`;
       if (hasHiring)
-        return `Send a jar of 100 jelly beans to ${who} at ${companyName}. 97 white, 3 red. Label: "You're reviewing 3 out of 100 conversations. How sure are you about the other 97?" Card: "Rulebase reviews all 100. — Gideon" + Calendly.`;
-      return `Mail a magnifying glass to ${who} at ${companyName}. Tag: "You're using this to review 3% of conversations. We review 100% without it." Back: "No gimmick — just math. — Gideon @ Rulebase" + QR to Calendly.`;
+        return `Send a jar of 100 jelly beans to ${who} at ${companyName}. 97 white, 3 red. Label: "You're reviewing 3 out of 100 conversations." Card: "Rulebase reviews all 100. — Gideon" + Calendly.`;
+      return `Mail a magnifying glass to ${who} at ${companyName}. Tag: "You're using this to review 3% of conversations. We review 100% without it." — Gideon @ Rulebase + QR to Calendly.`;
     }
 
     if (contacts.length > 0) {
@@ -209,6 +236,7 @@ export async function GET(request: Request) {
         csvRows.push(
           [
             esc(companyName),
+            esc(String(row.relevance_score ?? "")),
             esc(signal),
             esc(contactName),
             esc(title),
@@ -225,6 +253,7 @@ export async function GET(request: Request) {
       csvRows.push(
         [
           esc(companyName),
+          esc(String(row.relevance_score ?? "")),
           esc(signal),
           esc(""),
           esc(""),

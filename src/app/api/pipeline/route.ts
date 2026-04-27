@@ -4,7 +4,6 @@ import {
   runSignals,
   scoreCompany,
   classifyICP,
-  generateOutreach,
 } from "@/lib/rulebase/pipeline";
 import { generateAndPostBriefing } from "@/lib/rulebase/daily-briefing";
 
@@ -149,11 +148,13 @@ export async function POST(request: Request) {
       signalsRun++;
 
       // Step 5: Score
-      const { score, reason, confidence } = scoreCompany(signals, preset);
+      const { score, reason, confidence, tier } = scoreCompany(signals, preset);
       classifyICP(signals, preset);
 
-      // Build suggested approach from signals
-      const firedSignals = signals.filter((s) => s.found);
+      // Build suggested approach from top fired signals
+      const firedSignals = signals
+        .filter((s) => s.found)
+        .sort((a, b) => b.scoreBoost - a.scoreBoost);
       const suggestedApproach =
         firedSignals.length > 0
           ? firedSignals
@@ -163,13 +164,15 @@ export async function POST(request: Request) {
           : null;
 
       // Upsert campaign_organizations
+      // Thresholds: 9+ ready to contact, 7-8 qualified/monitoring, 5-6 discovered, <5 not ready
       await supabase.from("campaign_organizations").upsert(
         {
           campaign_id: campaignId,
           organization_id: orgId,
           relevance_score: score,
-          score_reason: `[${confidence}] ${reason}`,
-          status: score >= 7 ? "qualified" : "discovered",
+          score_reason: `[${tier}/${confidence}] ${reason}`,
+          status:
+            score >= 7 ? "qualified" : score >= 5 ? "discovered" : "discovered",
           readiness_tag:
             score >= 9
               ? "ready_to_contact"
@@ -203,7 +206,7 @@ export async function POST(request: Request) {
               found: signal.found,
               summary: signal.summary,
               evidence: signal.evidence,
-              data: {},
+              data: { tier: signal.tier, scoreBoost: signal.scoreBoost },
               confidence: signal.confidence,
             },
             status: "success",

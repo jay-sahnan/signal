@@ -91,11 +91,10 @@ const QA_PRESET: ICPPreset = {
     ],
   },
   signalSlugs: [
-    "cx-ops-hiring",
+    "new-leader-hired",
+    "compliance-qa-job-posting",
     "ai-agent-adoption-cx",
-    "tech-stack-no-incumbent",
-    "fast-growth-scaling",
-    "customer-facing-headcount",
+    "cx-team-scaling",
   ],
   apolloCompanyFilters: {
     q_organization_keyword_tags: [
@@ -186,12 +185,12 @@ const COMPLAINTS_PRESET: ICPPreset = {
     ],
   },
   signalSlugs: [
+    "consent-order-enforcement",
+    "new-leader-hired",
+    "rising-cfpb-complaints",
     "trustpilot-review-surge",
-    "regulatory-action",
-    "ai-agent-adoption-cx",
-    "tech-stack-no-incumbent",
     "pe-acquisition-funding",
-    "fast-growth-scaling",
+    "compliance-qa-job-posting",
   ],
   apolloCompanyFilters: {
     q_organization_keyword_tags: [
@@ -281,12 +280,12 @@ const SALES_COMPLIANCE_PRESET: ICPPreset = {
     ],
   },
   signalSlugs: [
-    "regulatory-action",
-    "tech-stack-no-incumbent",
+    "consent-order-enforcement",
+    "new-leader-hired",
+    "rising-cfpb-complaints",
     "pe-acquisition-funding",
-    "fast-growth-scaling",
-    "multi-state-expansion",
-    "customer-facing-headcount",
+    "udaap-sales-practice-risk",
+    "compliance-qa-job-posting",
   ],
   apolloCompanyFilters: {
     q_organization_keyword_tags: [
