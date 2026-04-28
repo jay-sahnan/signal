@@ -6,7 +6,6 @@ import { MessageCircle, X } from "lucide-react";
 import { AgentPanel } from "@/components/agent-panel";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
-import { MissingKeyBannerStack } from "@/components/missing-key-banner-stack";
 import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
@@ -48,13 +47,19 @@ function HeaderAgentButton() {
   );
 }
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({
+  children,
+  banner,
+}: {
+  children: React.ReactNode;
+  banner?: React.ReactNode;
+}) {
   return (
     <CampaignProvider>
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset className="max-h-dvh overflow-hidden">
-          <MissingKeyBannerStack />
+          {banner}
           <header className="bg-background/50 sticky top-0 z-50 flex h-12 shrink-0 items-center gap-2 border-b px-4 backdrop-blur-md lg:px-6">
             <div className="flex w-full items-center justify-between">
               <div className="flex items-center gap-1 lg:gap-2">

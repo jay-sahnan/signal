@@ -48,9 +48,6 @@ export const createSequence = tool({
       ),
   }),
   execute: async ({ name, campaignId, triggerSignalId, steps, contactIds }) => {
-    // Use getSupabaseAndUser — it respects BYPASS_AUTH=true (dev) and
-    // returns the DEV_USER stub instead of calling auth.getUser() which
-    // returns null under bypass.
     const ctx = await getSupabaseAndUser();
     if (!ctx) {
       return {

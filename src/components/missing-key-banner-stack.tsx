@@ -1,27 +1,22 @@
-"use client";
-
 import { INTEGRATIONS } from "@/lib/integrations";
-import { useIntegrationsStatus } from "@/hooks/use-integrations-status";
 import { MissingKeyBanner } from "@/components/missing-key-banner";
 
 /**
  * Renders one `<MissingKeyBanner />` per missing required integration.
- * Mounted at the top of the dashboard shell so it's the first thing a user
- * sees if the app isn't fully configured. Optional integrations are not
- * banner-worthy — those surface in the /settings integrations panel.
  *
- * Renders nothing while the status fetch is in flight or if it fails, so
- * the dashboard never shows a misleading "everything is broken" banner
- * during a transient hiccup.
+ * Server component — reads `process.env` directly so it works even when the
+ * DB or auth provider is the thing that's missing. Mount it in the root
+ * layout (above any code that touches Supabase / Clerk / etc.) so the user
+ * gets a "you're missing X" banner instead of a blank page when the layer
+ * that powers the rest of the app isn't configured.
+ *
+ * Optional integrations are not banner-worthy — those surface in the
+ * /settings integrations panel instead.
  */
 export function MissingKeyBannerStack() {
-  const { statuses } = useIntegrationsStatus();
-  if (!statuses) return null;
-
   const missingRequired = INTEGRATIONS.filter((integration) => {
     if (integration.severity !== "required") return false;
-    const status = statuses.find((s) => s.id === integration.id);
-    return status && !status.configured;
+    return integration.envVars.some((name) => !process.env[name]);
   });
 
   if (missingRequired.length === 0) return null;
@@ -29,12 +24,14 @@ export function MissingKeyBannerStack() {
   return (
     <>
       {missingRequired.map((integration) => {
-        const status = statuses.find((s) => s.id === integration.id);
+        const missingEnvVars = integration.envVars.filter(
+          (name) => !process.env[name],
+        );
         return (
           <MissingKeyBanner
             key={integration.id}
             integration={integration}
-            missingEnvVars={status?.missingEnvVars ?? integration.envVars}
+            missingEnvVars={missingEnvVars}
           />
         );
       })}

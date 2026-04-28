@@ -1,5 +1,3 @@
-"use client";
-
 import type { Integration } from "@/lib/integrations";
 
 interface MissingKeyBannerProps {
