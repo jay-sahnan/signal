@@ -49,12 +49,17 @@ export async function POST(request: Request) {
   }
 
   // Filter to active campaigns only
-  const scored = (rows ?? []).filter(
-    (r) =>
-      r.campaign &&
-      (r.campaign as { status: string }).status !== "completed" &&
-      (r.campaign as { status: string }).status !== "paused",
-  );
+  const scored = (rows ?? []).filter((r) => {
+    const campaign = r.campaign as unknown as {
+      name: string;
+      status: string;
+    } | null;
+    return (
+      campaign &&
+      campaign.status !== "completed" &&
+      campaign.status !== "paused"
+    );
+  });
 
   if (scored.length === 0) {
     return NextResponse.json({ message: "No scored companies found" });
@@ -80,8 +85,11 @@ export async function POST(request: Request) {
   ); // 5-7
 
   const formatCompany = (r: (typeof scored)[0]) => {
-    const org = r.organization as { name: string; domain: string } | null;
-    const campaign = r.campaign as { name: string } | null;
+    const org = r.organization as unknown as {
+      name: string;
+      domain: string;
+    } | null;
+    const campaign = r.campaign as unknown as { name: string } | null;
     return `• *${org?.name ?? "Unknown"}* (${org?.domain ?? "—"}) — Score: ${r.relevance_score}/10 | ${campaign?.name ?? ""}${r.score_reason ? `\n  _${r.score_reason.slice(0, 120)}_` : ""}`;
   };
 
