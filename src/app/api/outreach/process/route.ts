@@ -48,6 +48,13 @@ interface FollowupPayload {
 type Payload = SignalPayload | FollowupPayload;
 
 export async function POST(request: Request) {
+  // Internal route — verify caller has the service-role key
+  const authHeader = request.headers.get("authorization") ?? "";
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey || authHeader !== `Bearer ${serviceKey}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let payload: Payload;
   try {
     payload = await request.json();

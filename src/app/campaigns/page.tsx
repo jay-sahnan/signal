@@ -34,15 +34,30 @@ export default function CampaignsIndexPage() {
     mountedRef.current = true;
 
     const fetchCampaigns = async () => {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("campaigns")
-        .select("id, name, status, created_at")
-        .order("updated_at", { ascending: false });
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("campaigns")
+          .select("id, name, status, created_at")
+          .order("updated_at", { ascending: false });
 
-      if (mountedRef.current) {
-        setCampaigns(data ?? []);
-        setLoading(false);
+        if (error) {
+          console.error("Failed to fetch campaigns:", error.message);
+          if (mountedRef.current) {
+            toast.error(`Failed to load campaigns: ${error.message}`);
+          }
+        }
+
+        if (mountedRef.current) {
+          setCampaigns(data ?? []);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Campaigns fetch error:", err);
+        if (mountedRef.current) {
+          toast.error("Failed to load campaigns");
+          setLoading(false);
+        }
       }
     };
 
