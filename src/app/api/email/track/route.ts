@@ -21,7 +21,14 @@ const STATUS_PRIORITY: Record<string, number> = {
   complained: 6,
 };
 
-export async function POST() {
+export async function POST(request: Request) {
+  // Cron/internal route — verify caller has the service-role key
+  const authHeader = request.headers.get("authorization") ?? "";
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey || authHeader !== `Bearer ${serviceKey}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = getAdminClient();
 
   // Load recent sent emails that haven't reached a terminal state
