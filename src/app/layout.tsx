@@ -7,6 +7,7 @@ import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { MissingKeyBannerStack } from "@/components/missing-key-banner-stack";
 import { StreamingProvider } from "@/lib/streaming-context";
 import "./globals.css";
 
@@ -39,7 +40,9 @@ export default function RootLayout({
           >
             <StreamingProvider>
               <TooltipProvider>
-                <DashboardShell>{children}</DashboardShell>
+                <DashboardShell banner={<MissingKeyBannerStack />}>
+                  {children}
+                </DashboardShell>
                 <Toaster richColors />
               </TooltipProvider>
             </StreamingProvider>
