@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@/lib/supabase/server";
 
 export const saveCampaign = tool({
@@ -62,9 +63,7 @@ export const saveCampaign = tool({
   }),
   execute: async (input) => {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { userId } = await auth();
 
     if (input.id) {
       const updateData: Record<string, unknown> = { name: input.name };
@@ -100,7 +99,7 @@ export const saveCampaign = tool({
         search_criteria: input.searchCriteria || {},
         notes: input.notes,
         profile_id: input.profileId || null,
-        user_id: user?.id,
+        user_id: userId,
       })
       .select()
       .single();

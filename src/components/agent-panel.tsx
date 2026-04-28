@@ -5,11 +5,14 @@ import { usePathname } from "next/navigation";
 import type { UIMessage } from "ai";
 import { useChat } from "@ai-sdk/react";
 
+import { useAuth } from "@clerk/nextjs";
+
 import { ChatInput } from "@/components/chat/chat-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { useCampaign } from "@/lib/campaign-context";
 import { useStreaming } from "@/lib/streaming-context";
 import { saveChat } from "@/lib/services/chat-history";
+import { createClient } from "@/lib/supabase/client";
 
 const MIN_WIDTH = 360;
 const MAX_WIDTH_RATIO = 0.6;
@@ -141,13 +144,22 @@ function AgentPanelInner({
   const pathname = usePathname();
   const { register } = useStreaming();
   const { consumePendingPrompt } = useCampaign();
+  const { userId } = useAuth();
   const didAutoSend = useRef(false);
 
   const { messages, sendMessage, status, stop } = useChat({
     id: campaignId ? `campaign-${campaignId}` : `global-${chatId}`,
     messages: initialMessages,
     onFinish({ messages: allMessages }) {
-      saveChat(chatId, allMessages, campaignId ?? undefined);
+      if (userId) {
+        saveChat(
+          createClient(),
+          userId,
+          chatId,
+          allMessages,
+          campaignId ?? undefined,
+        );
+      }
     },
   });
 

@@ -21,6 +21,7 @@ import { TogglePill } from "@/components/ui/toggle-pill";
 import { EmailSkillCard } from "@/components/email-skills/email-skill-card";
 import { EmailSkillDetailDialog } from "@/components/email-skills/email-skill-detail-dialog";
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@clerk/nextjs";
 import type { EmailSkill, EmailSkillScopeType } from "@/lib/types/email-skill";
 import type { Campaign } from "@/lib/types/campaign";
 import type { UserProfile } from "@/lib/types/profile";
@@ -43,10 +44,10 @@ const SOURCE_FILTERS = [
 type SourceFilter = (typeof SOURCE_FILTERS)[number]["value"];
 
 export default function EmailSkillsPage() {
+  const { userId } = useAuth();
   const [skills, setSkills] = useState<EmailSkill[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
 
   const [scope, setScope] = useState<ScopeFilter>("global");
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
@@ -61,9 +62,7 @@ export default function EmailSkillsPage() {
 
   const fetchData = useCallback(async () => {
     const supabase = createClient();
-
-    const [userRes, skillsRes, campaignsRes, profilesRes] = await Promise.all([
-      supabase.auth.getUser(),
+    const [skillsRes, campaignsRes, profilesRes] = await Promise.all([
       supabase
         .from("email_skills")
         .select("*")
@@ -80,15 +79,14 @@ export default function EmailSkillsPage() {
     ]);
 
     if (!mountedRef.current) return;
-    setUserId(userRes.data.user?.id ?? null);
     setSkills((skillsRes.data as EmailSkill[]) ?? []);
     setCampaigns((campaignsRes.data as Campaign[]) ?? []);
     setProfiles((profilesRes.data as UserProfile[]) ?? []);
     setLoading(false);
   }, []);
 
-  const currentScopeId = (() => {
-    if (scope === "global") return userId;
+  const currentScopeId: string | null = (() => {
+    if (scope === "global") return userId ?? null;
     if (scope === "profile") return selectedProfileId || null;
     return selectedCampaignId || null;
   })();
@@ -337,6 +335,7 @@ function CreateSkillButton({
   onOpenChange: (open: boolean) => void;
   onCreated: (skill: EmailSkill) => void;
 }) {
+  const { userId } = useAuth();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -359,19 +358,16 @@ function CreateSkillButton({
   const handleCreate = async () => {
     if (!name || !instructions) return;
     setSaving(true);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
+    if (!userId) {
       toast.error("Not signed in");
       setSaving(false);
       return;
     }
+    const supabase = createClient();
     const { data, error } = await supabase
       .from("email_skills")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         name,
         slug: slugify(name) || `skill-${Date.now()}`,
         description: description || null,

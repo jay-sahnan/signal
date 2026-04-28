@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UIMessage } from "ai";
 
 // ---------------------------------------------------------------------------
@@ -33,16 +33,13 @@ export interface ChatSummary {
 }
 
 export async function saveChat(
+  supabase: SupabaseClient,
+  userId: string,
   chatId: string,
   messages: UIMessage[],
   campaignId?: string,
 ): Promise<void> {
-  const supabase = createClient();
   const title = generateTitle(messages);
-
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
 
   const { error } = await supabase.from("chats").upsert(
     {
@@ -51,7 +48,7 @@ export async function saveChat(
       campaign_id: campaignId ?? null,
       messages: JSON.parse(JSON.stringify(messages)),
       updated_at: new Date().toISOString(),
-      user_id: authUser?.id,
+      user_id: userId,
     },
     { onConflict: "id" },
   );
@@ -59,13 +56,15 @@ export async function saveChat(
   if (error) console.error("[chat-history] save failed:", error.message);
 }
 
-export async function loadChat(chatId: string): Promise<{
+export async function loadChat(
+  supabase: SupabaseClient,
+  chatId: string,
+): Promise<{
   id: string;
   title: string;
   campaign_id: string | null;
   messages: UIMessage[];
 } | null> {
-  const supabase = createClient();
   const { data, error } = await supabase
     .from("chats")
     .select("id, title, campaign_id, messages")
@@ -82,9 +81,9 @@ export async function loadChat(chatId: string): Promise<{
 }
 
 export async function loadCampaignChat(
+  supabase: SupabaseClient,
   campaignId: string,
 ): Promise<{ id: string; messages: UIMessage[] } | null> {
-  const supabase = createClient();
   const { data } = await supabase
     .from("chats")
     .select("id, messages")
@@ -97,8 +96,10 @@ export async function loadCampaignChat(
   return data as { id: string; messages: UIMessage[] };
 }
 
-export async function listChats(limit = 30): Promise<ChatSummary[]> {
-  const supabase = createClient();
+export async function listChats(
+  supabase: SupabaseClient,
+  limit = 30,
+): Promise<ChatSummary[]> {
   const { data, error } = await supabase
     .from("chats")
     .select("id, title, campaign_id, updated_at")
@@ -109,7 +110,9 @@ export async function listChats(limit = 30): Promise<ChatSummary[]> {
   return data as ChatSummary[];
 }
 
-export async function deleteChat(chatId: string): Promise<void> {
-  const supabase = createClient();
+export async function deleteChat(
+  supabase: SupabaseClient,
+  chatId: string,
+): Promise<void> {
   await supabase.from("chats").delete().eq("id", chatId);
 }

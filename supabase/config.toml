@@ -293,11 +293,18 @@ enabled = false
 # user_pool_id = "my-user-pool-id"
 # user_pool_region = "us-east-1"
 
-# Use Clerk as a third-party provider alongside Supabase Auth.
+# Use Clerk as a third-party provider — Clerk-issued JWTs are validated by
+# Supabase so RLS policies can read auth.jwt()->>'sub' as the user id.
+#
+# Stays disabled by default so `supabase start` works on a fresh clone
+# (Supabase validates the domain against Clerk's servers, so a placeholder
+# breaks startup). `pnpm setup` flips this to `enabled = true` when you
+# provide a real Clerk Frontend API domain. To enable manually, set
+# CLERK_FRONTEND_API_DOMAIN in .env.local (e.g. "your-app.clerk.accounts.dev")
+# and change the line below.
 [auth.third_party.clerk]
 enabled = false
-# Obtain from https://clerk.com/setup/supabase
-# domain = "example.clerk.accounts.dev"
+domain = "env(CLERK_FRONTEND_API_DOMAIN)"
 
 [edge_runtime]
 enabled = true

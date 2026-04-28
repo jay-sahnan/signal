@@ -6,12 +6,15 @@ import type { UIMessage } from "ai";
 import { useChat } from "@ai-sdk/react";
 import { SquarePen } from "lucide-react";
 
+import { useAuth } from "@clerk/nextjs";
+
 import { ChatInput } from "@/components/chat/chat-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { Button } from "@/components/ui/button";
 import { useCampaign } from "@/lib/campaign-context";
 import { useStreaming } from "@/lib/streaming-context";
 import { loadChat, saveChat } from "@/lib/services/chat-history";
+import { createClient } from "@/lib/supabase/client";
 
 // ---------------------------------------------------------------------------
 // Inner component -- only rendered after initial messages are loaded so that
@@ -45,6 +48,7 @@ function ChatView({
   const [input, setInput] = useState("");
   const { activeCampaignId } = useCampaign();
   const { register } = useStreaming();
+  const { userId } = useAuth();
   const didAutoSend = useRef(false);
   const needsSummary = useRef(false);
 
@@ -54,7 +58,15 @@ function ChatView({
     id: chatId,
     messages: initialMessages,
     onFinish({ messages: allMessages }) {
-      saveChat(chatId, allMessages, activeCampaignId ?? undefined);
+      if (userId) {
+        saveChat(
+          createClient(),
+          userId,
+          chatId,
+          allMessages,
+          activeCampaignId ?? undefined,
+        );
+      }
       turnCount.current++;
       // Generate a clean title after the first assistant reply so the chat
       // history doesn't show the raw user message as the title.
@@ -168,7 +180,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     let cancelled = false;
-    loadChat(chatId).then((chat) => {
+    loadChat(createClient(), chatId).then((chat) => {
       if (cancelled) return;
       setInitialMessages(chat?.messages ?? []);
       const title = (chat as { title?: string | null } | null)?.title ?? null;

@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 // Signal interactive setup. See docs/setup.md for the manual path.
 
-import { existsSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
+import {
+  constants as fsConstants,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  copyFileSync,
+} from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output, exit, argv } from "node:process";
 import { execSync, spawnSync } from "node:child_process";
@@ -114,8 +120,12 @@ function preflight() {
 }
 
 function readEnvLocal() {
-  if (!existsSync(ENV_PATH)) return "";
-  return readFileSync(ENV_PATH, "utf8");
+  try {
+    return readFileSync(ENV_PATH, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return "";
+    throw err;
+  }
 }
 
 function writeEnvLocal(content) {
@@ -132,13 +142,16 @@ function setEnvKey(content, key, value) {
 
 async function bootstrapEnv() {
   log.header("Env file");
-  if (RESET && existsSync(ENV_PATH)) {
-    log.warn(".env.local exists — --reset was passed, overwriting.");
+  if (RESET) {
     copyFileSync(ENV_EXAMPLE, ENV_PATH);
-  } else if (!existsSync(ENV_PATH)) {
-    copyFileSync(ENV_EXAMPLE, ENV_PATH);
+    log.warn(".env.local reset — overwritten from .env.example.");
+    return;
+  }
+  try {
+    copyFileSync(ENV_EXAMPLE, ENV_PATH, fsConstants.COPYFILE_EXCL);
     log.ok(".env.local created from .env.example");
-  } else {
+  } catch (err) {
+    if (err.code !== "EEXIST") throw err;
     log.ok(".env.local already exists — will update in place.");
   }
 }
@@ -173,6 +186,151 @@ async function promptRequired() {
 
   writeEnvLocal(content);
   log.ok("Required keys written.");
+}
+
+async function promptClerk() {
+  log.header("Clerk (auth)");
+  log.info("Signal uses Clerk for sign-in/sign-up. Pick an option:");
+  log.plain("  [1] I already have a Clerk app  → paste keys");
+  log.plain(
+    "  [2] Set up Clerk now            → opens dashboard, walks through",
+  );
+  log.plain("  [3] Skip — Keyless mode         → ephemeral dev app, dashboard");
+  log.plain(
+    "                                    will be empty (see warning later)",
+  );
+
+  // Default to [2] — the only option that produces a fully working dashboard.
+  // [3] (Keyless) leaves the dashboard empty until they finish Clerk setup.
+  const choice = (await ask("Choose [1/2/3] (default 2)")).trim() || "2";
+
+  if (choice === "3") {
+    let content = readEnvLocal();
+    content = setEnvKey(content, "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "");
+    content = setEnvKey(content, "CLERK_SECRET_KEY", "");
+    content = setEnvKey(content, "CLERK_FRONTEND_API_DOMAIN", "");
+    writeEnvLocal(content);
+    log.warn(
+      "Keyless mode: sign-in works on first `pnpm dev` but the dashboard\n" +
+        "  will be empty until you fill in the Clerk env vars. A banner in the\n" +
+        "  app reminds you. Re-run `pnpm setup` when ready.",
+    );
+    return;
+  }
+
+  if (choice === "2") {
+    const url = "https://dashboard.clerk.com/sign-up";
+    log.info(`Opening ${url} in your browser...`);
+    try {
+      execSync(
+        process.platform === "darwin"
+          ? `open "${url}"`
+          : process.platform === "win32"
+            ? `start "" "${url}"`
+            : `xdg-open "${url}"`,
+        { stdio: "ignore" },
+      );
+    } catch {
+      log.info(`(Couldn't open browser — visit ${url} manually.)`);
+    }
+    log.plain("");
+    log.plain("  In the Clerk dashboard:");
+    log.plain("    1. Sign up + create an application (any name).");
+    log.plain(
+      "    2. Configure → API Keys → copy the publishable + secret keys.",
+    );
+    log.plain("    3. Configure → Integrations → Supabase → Activate.");
+    log.plain(
+      "    4. Copy the Frontend API domain (e.g. your-app.clerk.accounts.dev).",
+    );
+    log.plain("");
+    await ask("[after creating the app] Press Enter to continue");
+  }
+
+  // Options [1] and [2] both end here, collecting the three values.
+  const pubKey = await askValidated(
+    "Clerk publishable key (pk_test_… or pk_live_…)",
+    /^pk_(test|live)_[\w-]+$/,
+  );
+  const secretKey = await askValidated(
+    "Clerk secret key (sk_test_… or sk_live_…)",
+    /^sk_(test|live)_[\w-]+$/,
+    { secret: true },
+  );
+  const domain = await askValidated(
+    "Clerk Frontend API domain (e.g. your-app.clerk.accounts.dev)",
+    /^[\w.-]+\.clerk\.accounts\.dev$|^clerk\.[\w.-]+$/,
+  );
+
+  let content = readEnvLocal();
+  content = setEnvKey(content, "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", pubKey);
+  content = setEnvKey(content, "CLERK_SECRET_KEY", secretKey);
+  content = setEnvKey(content, "CLERK_FRONTEND_API_DOMAIN", domain);
+  writeEnvLocal(content);
+  log.ok("Clerk keys written to .env.local.");
+
+  // Enable third-party Clerk auth in supabase/config.toml. Stays disabled
+  // by default so `supabase start` works on a fresh clone — flip it now
+  // that the user has supplied a real Clerk Frontend API domain.
+  enableSupabaseClerkAuth();
+
+  // Hosted Supabase needs a manual Clerk-third-party-auth step in the
+  // Supabase dashboard. Local Supabase reads the env var via config.toml.
+  const supaUrl = (content.match(/^NEXT_PUBLIC_SUPABASE_URL=(.+)$/m) || [])[1];
+  if (
+    supaUrl &&
+    !supaUrl.includes("127.0.0.1") &&
+    !supaUrl.includes("localhost")
+  ) {
+    const ref = supaUrl.match(/https:\/\/([^.]+)\./)?.[1] ?? "<your-ref>";
+    const supaUrl2 = `https://supabase.com/dashboard/project/${ref}/auth/providers`;
+    log.warn(
+      `Hosted Supabase needs one more click. Visit:\n  ${supaUrl2}\n` +
+        `  Add Clerk as a third-party auth provider with domain "${domain}".`,
+    );
+  }
+}
+
+function enableSupabaseClerkAuth() {
+  const path = join(ROOT, "supabase", "config.toml");
+  let original;
+  try {
+    original = readFileSync(path, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return;
+    throw err;
+  }
+  // Match the [auth.third_party.clerk] block's `enabled = false` line and
+  // flip it. Anchored to the block heading so we don't rewrite other
+  // disabled providers (firebase, auth0, aws_cognito).
+  const updated = original.replace(
+    /(\[auth\.third_party\.clerk\][\s\S]*?enabled\s*=\s*)false/,
+    "$1true",
+  );
+  if (updated === original) {
+    log.warn(
+      "Couldn't auto-enable Clerk in supabase/config.toml — flip\n" +
+        "  `enabled = false` to `true` under [auth.third_party.clerk] manually.",
+    );
+    return;
+  }
+  writeFileSync(path, updated);
+  log.ok("Enabled Clerk third-party auth in supabase/config.toml.");
+}
+
+async function askValidated(label, regex, opts = {}) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const value = (await ask(label, opts)).trim();
+    if (!value) {
+      log.warn("Empty value — try again or rerun setup later.");
+      continue;
+    }
+    if (regex.test(value)) return value;
+    log.warn("Format looks off — try again.");
+  }
+  // Fall through: accept whatever they typed last on the third try.
+  log.warn("Saving anyway — couldn't validate format after 3 tries.");
+  return (await ask(label, opts)).trim();
 }
 
 async function promptOptional() {
@@ -333,15 +491,32 @@ function typecheck() {
 
 function summary() {
   log.header("Done");
+  const env = readEnvLocal();
+  const isKeyless = !/^NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=.+$/m.test(env);
+
   log.plain("Next:");
   log.plain(
-    `  ${colors.bold}pnpm dev${colors.reset}   # http://localhost:3000 → sign up to create the first account`,
+    `  ${colors.bold}pnpm dev${colors.reset}   # http://localhost:3000`,
   );
   log.plain(`  ${colors.bold}pnpm test${colors.reset}  # unit tests`);
   log.plain("");
-  log.info(
-    "Local Supabase skips email confirmation — signup is instant. See docs/setup.md if anything above didn't work.",
-  );
+
+  if (isKeyless) {
+    log.warn(
+      "You picked Keyless mode. Sign-in works, but the dashboard will be\n" +
+        "  empty until you finish Clerk setup. To fix:\n" +
+        "    pnpm setup            # rerun, pick option [2]\n" +
+        "  or paste these into .env.local manually:\n" +
+        "    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_…\n" +
+        "    CLERK_SECRET_KEY=sk_test_…\n" +
+        "    CLERK_FRONTEND_API_DOMAIN=your-app.clerk.accounts.dev",
+    );
+  } else {
+    log.info(
+      "Visit http://localhost:3000 — Clerk's themed sign-in form is ready.\n" +
+        "Free tier covers 10k MAU. See docs/setup.md if anything didn't work.",
+    );
+  }
 }
 
 async function main() {
@@ -349,6 +524,7 @@ async function main() {
     preflight();
     await bootstrapEnv();
     await promptRequired();
+    await promptClerk();
     await promptOptional();
     installDeps();
     await startSupabase();
