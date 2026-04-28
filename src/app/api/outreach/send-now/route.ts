@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { sendApprovedDraft } from "@/lib/services/outreach-sender";
+import { getPostHogClient } from "@/lib/posthog-server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 
@@ -100,6 +101,18 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+
+  const posthog = getPostHogClient();
+  posthog.capture({
+    distinctId: user.id,
+    event: "outreach_email_sent",
+    properties: {
+      draft_id: result.draftId,
+      sequence_id: enrollment.sequence_id,
+      person_id: enrollment.person_id,
+      step: enrollment.current_step,
+    },
+  });
 
   return NextResponse.json({
     ok: true,

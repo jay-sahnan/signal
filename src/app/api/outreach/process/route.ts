@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { getPostHogClient } from "@/lib/posthog-server";
 import { sendApprovedDraft } from "@/lib/services/outreach-sender";
 import {
   selectContactsForSignal,
@@ -389,8 +390,22 @@ async function pickAndDraft(
         },
       );
 
-      if (saveResult.ok) drafted++;
-      else console.error("[outreach] saveDraft failed", saveResult.error);
+      if (saveResult.ok) {
+        drafted++;
+        getPostHogClient().capture({
+          distinctId: seq.user_id,
+          event: "outreach_drafted",
+          properties: {
+            campaign_id: payload.campaignId,
+            signal_id: payload.signalId,
+            sequence_id: seq.id,
+            person_id: pick.personId,
+            organization_id: payload.organizationId ?? null,
+          },
+        });
+      } else {
+        console.error("[outreach] saveDraft failed", saveResult.error);
+      }
     }
   }
 

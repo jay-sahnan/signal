@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
+import posthog from "posthog-js";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,10 @@ export default function CampaignsIndexPage() {
       return;
     }
 
+    posthog.capture("campaign_deleted", {
+      campaign_id: campaign.id,
+      campaign_status: campaign.status,
+    });
     setCampaigns((prev) => prev.filter((c) => c.id !== campaign.id));
     toast.success(`Deleted "${campaign.name}"`);
     setDeletingId(null);

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { ArrowUp, Paperclip, Square } from "lucide-react";
+import posthog from "posthog-js";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +49,9 @@ export function ChatInput({
   };
 
   const handleSubmit = () => {
+    posthog.capture("chat_message_sent", {
+      message_length: input.trim().length,
+    });
     onSubmit();
     // Reset textarea height
     if (textareaRef.current) {
@@ -62,6 +66,10 @@ export function ChatInput({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !onCsvUpload) return;
+    posthog.capture("csv_uploaded", {
+      file_name: file.name,
+      file_size_bytes: file.size,
+    });
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {

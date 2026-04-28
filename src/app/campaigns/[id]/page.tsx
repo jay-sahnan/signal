@@ -12,6 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { useCampaign } from "@/lib/campaign-context";
 import { useStreaming } from "@/lib/streaming-context";
 import { createClient } from "@/lib/supabase/client";
+import posthog from "posthog-js";
+
 import { cn } from "@/lib/utils";
 import type {
   Campaign,
@@ -318,6 +320,10 @@ export default function CampaignDetailPage() {
 
   const refreshScores = async () => {
     setRefreshingScores(true);
+    posthog.capture("contact_scores_refreshed", {
+      campaign_id: campaignId,
+      contact_count: contacts.length,
+    });
     try {
       await fetch("/api/refresh-scores", {
         method: "POST",

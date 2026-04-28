@@ -15,6 +15,7 @@ import {
   estimateClaudeCostFromUsage,
   trackUsage,
 } from "@/lib/services/cost-tracker";
+import { getPostHogClient } from "@/lib/posthog-server";
 import { buildSystemPrompt } from "@/lib/system-prompt";
 import { allTools } from "@/lib/tools";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
@@ -130,7 +131,11 @@ export async function POST(request: Request) {
             cacheControl: { type: "ephemeral" },
           },
         },
-        experimental_context: { writer },
+        experimental_context: {
+          writer,
+          userId: user.id,
+          campaignId: campaignId ?? null,
+        },
         onFinish({ usage }) {
           trackUsage({
             service: "claude",
@@ -145,6 +150,17 @@ export async function POST(request: Request) {
             },
             campaign_id: campaignId,
             user_id: user.id,
+          });
+          const posthog = getPostHogClient();
+          posthog.capture({
+            distinctId: user.id,
+            event: "chat_completed",
+            properties: {
+              campaign_id: campaignId ?? null,
+              tokens_input: usage.inputTokens ?? 0,
+              tokens_output: usage.outputTokens ?? 0,
+              estimated_cost_usd: estimateClaudeCostFromUsage("sonnet", usage),
+            },
           });
         },
       });

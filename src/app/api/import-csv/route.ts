@@ -1,3 +1,4 @@
+import { getPostHogClient } from "@/lib/posthog-server";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 import {
   findOrCreateOrganization,
@@ -122,6 +123,18 @@ export async function POST(request: Request) {
     await linkOrganizationToCampaign(org.id, campaignId);
     imported++;
   }
+
+  const posthog = getPostHogClient();
+  posthog.capture({
+    distinctId: user.id,
+    event: "csv_import_completed",
+    properties: {
+      campaign_id: campaignId,
+      imported,
+      skipped,
+      total: companies.length,
+    },
+  });
 
   return Response.json({ imported, skipped });
 }

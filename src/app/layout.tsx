@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { MissingKeyBannerStack } from "@/components/missing-key-banner-stack";
+import { PostHogIdentify } from "@/components/posthog-identify";
 import { StreamingProvider } from "@/lib/streaming-context";
 import "./globals.css";
 
@@ -32,6 +33,7 @@ export default function RootLayout({
         className={`${inter.variable} ${GeistMono.variable} font-sans antialiased`}
       >
         <ClerkProvider appearance={{ theme: shadcn }}>
+          <PostHogIdentify />
           <ThemeProvider
             attribute="class"
             defaultTheme="system"

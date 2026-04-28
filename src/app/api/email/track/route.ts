@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { getMessage } from "@/lib/services/agentmail-service";
+import { getPostHogClient } from "@/lib/posthog-server";
+
+const STATUS_EVENT: Record<string, string> = {
+  delivered: "email_delivered",
+  opened: "email_opened",
+  clicked: "email_clicked",
+  replied: "email_replied",
+  bounced: "email_bounced",
+  complained: "email_complained",
+};
 
 /**
  * Delivery tracking endpoint. Call via cron or QStash schedule.
@@ -92,6 +102,19 @@ export async function POST() {
         .from("campaign_people")
         .update({ outreach_status: newStatus })
         .eq("id", email.campaign_people_id);
+
+      const eventName = STATUS_EVENT[newStatus];
+      if (eventName) {
+        getPostHogClient().capture({
+          distinctId: email.user_id,
+          event: eventName,
+          properties: {
+            sent_email_id: email.id,
+            campaign_people_id: email.campaign_people_id,
+            previous_status: email.status,
+          },
+        });
+      }
 
       updated++;
     } catch {

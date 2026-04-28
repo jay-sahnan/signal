@@ -5,6 +5,7 @@ import {
   recordBounce,
   recordVerifiedEmail,
 } from "@/lib/services/email-pattern";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 export const runtime = "nodejs";
 
@@ -41,13 +42,14 @@ interface SentEmailRow {
   status: string;
   to_email: string | null;
   person_id: string | null;
+  user_id: string | null;
 }
 
 async function findSentEmail(
   supabase: ReturnType<typeof getAdminClient>,
   args: { threadId: string | null; messageId: string | null },
 ): Promise<SentEmailRow | null> {
-  const select = "id, campaign_people_id, status, to_email, person_id";
+  const select = "id, campaign_people_id, status, to_email, person_id, user_id";
 
   if (args.messageId) {
     const { data } = await supabase
@@ -124,6 +126,17 @@ export async function POST(req: Request) {
           .update({ outreach_status: "replied" })
           .eq("id", sent.campaign_people_id),
       ]);
+      if (sent.user_id) {
+        getPostHogClient().capture({
+          distinctId: sent.user_id,
+          event: "email_replied",
+          properties: {
+            sent_email_id: sent.id,
+            campaign_people_id: sent.campaign_people_id,
+            person_id: sent.person_id,
+          },
+        });
+      }
       return NextResponse.json({ ok: true, updated: sent.id });
     }
 
@@ -160,6 +173,17 @@ export async function POST(req: Request) {
         );
       }
       await Promise.all(tasks);
+      if (sent.user_id && sent.status === "sent") {
+        getPostHogClient().capture({
+          distinctId: sent.user_id,
+          event: "email_delivered",
+          properties: {
+            sent_email_id: sent.id,
+            campaign_people_id: sent.campaign_people_id,
+            person_id: sent.person_id,
+          },
+        });
+      }
       return NextResponse.json({ ok: true, delivered: sent.id });
     }
 
@@ -187,6 +211,17 @@ export async function POST(req: Request) {
         );
       }
       await Promise.all(tasks);
+      if (sent.user_id) {
+        getPostHogClient().capture({
+          distinctId: sent.user_id,
+          event: "email_bounced",
+          properties: {
+            sent_email_id: sent.id,
+            campaign_people_id: sent.campaign_people_id,
+            person_id: sent.person_id,
+          },
+        });
+      }
       return NextResponse.json({ ok: true, bounced: sent.id });
     }
 

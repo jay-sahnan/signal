@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Clock, Loader2, RefreshCw, Send } from "lucide-react";
+import posthog from "posthog-js";
 import { toast } from "sonner";
 import { ContactDetail } from "@/components/campaign/contact-detail";
 import { Button } from "@/components/ui/button";
@@ -366,6 +367,15 @@ function ReviewPageInner() {
           .in("id", pendingIds);
       }
 
+      posthog.capture(
+        action === "approved" ? "draft_approved" : "draft_rejected",
+        {
+          sequence_id: sequenceId,
+          draft_count: pendingIds.length,
+          company_name: currentContact.company_name ?? undefined,
+        },
+      );
+
       setDrafts((prev) =>
         prev.map((d) =>
           pendingIds.includes(d.id) ? { ...d, review_status: action } : d,
@@ -398,6 +408,7 @@ function ReviewPageInner() {
       personGroups,
       personIds,
       saving,
+      sequenceId,
     ],
   );
 
@@ -533,6 +544,12 @@ function ReviewPageInner() {
           return;
         }
 
+        posthog.capture("email_sent_now", {
+          draft_id: draftId,
+          sequence_id: sequenceId,
+          step_number: draft.step_number,
+          company_name: draft.company_name ?? undefined,
+        });
         toast.success("Email sent");
         setDrafts((prev) =>
           prev.map((d) => {
@@ -561,7 +578,7 @@ function ReviewPageInner() {
         });
       }
     },
-    [drafts, edits, sendingDraftIds],
+    [drafts, edits, sendingDraftIds, sequenceId],
   );
 
   const handleRegenerate = useCallback(
@@ -613,6 +630,11 @@ function ReviewPageInner() {
           },
         }));
 
+        posthog.capture("email_regenerated", {
+          draft_id: draftId,
+          sequence_id: sequenceId,
+          step_number: draft.step_number,
+        });
         toast.success("Email regenerated");
       } catch (err) {
         toast.error(
@@ -626,7 +648,7 @@ function ReviewPageInner() {
         });
       }
     },
-    [drafts, regeneratingDraftIds],
+    [drafts, regeneratingDraftIds, sequenceId],
   );
 
   const handleContactEmailEdit = useCallback(
