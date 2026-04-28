@@ -78,41 +78,24 @@ export async function POST(request: Request) {
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL || "https://signal-rulebase.vercel.app";
 
-  // Group by score tier
-  const tier1 = scored.filter((r) => r.relevance_score >= 8); // 8-10
-  const tier2 = scored.filter(
-    (r) => r.relevance_score >= 5 && r.relevance_score < 8,
-  ); // 5-7
+  // Top 10 only, already sorted by relevance_score desc
+  const top10 = scored.slice(0, 10);
 
-  const formatCompany = (r: (typeof scored)[0]) => {
+  const formatCompany = (r: (typeof scored)[0], rank: number) => {
     const org = r.organization as unknown as {
       name: string;
       domain: string;
     } | null;
     const campaign = r.campaign as unknown as { name: string } | null;
-    return `• *${org?.name ?? "Unknown"}* (${org?.domain ?? "—"}) — Score: ${r.relevance_score}/10 | ${campaign?.name ?? ""}${r.score_reason ? `\n  _${r.score_reason.slice(0, 120)}_` : ""}`;
+    return `${rank}. *${org?.name ?? "Unknown"}* (${org?.domain ?? "—"}) — ${r.relevance_score}/10 | ${campaign?.name ?? ""}${r.score_reason ? `\n    _${r.score_reason.slice(0, 120)}_` : ""}`;
   };
 
   const blocks = [
     `*Signal Daily Briefing — ${dayName}, ${dateStr}*`,
-    `${scored.length} companies scored 5+ across all active campaigns.\n`,
+    `Top 10 companies by signal strength (${scored.length} total scored 5+)\n`,
+    top10.map((r, i) => formatCompany(r, i + 1)).join("\n"),
+    `\n<${appUrl}|View all ${scored.length} companies in Signal →>`,
   ];
-
-  if (tier1.length > 0) {
-    blocks.push(`*:fire: Priority Targets (8-10)*`);
-    blocks.push(tier1.map(formatCompany).join("\n"));
-  }
-
-  if (tier2.length > 0) {
-    blocks.push(`\n*:eyes: Monitoring (5-7)*`);
-    blocks.push(tier2.map(formatCompany).join("\n"));
-  }
-
-  if (isMonday) {
-    blocks.push(
-      `\n:link: *Weekly dashboard:* <${appUrl}|Open Signal Dashboard>`,
-    );
-  }
 
   const slackPayload = { text: blocks.join("\n") };
 
@@ -132,7 +115,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     message: "Briefing sent",
-    companiesIncluded: scored.length,
-    isMonday,
+    companiesIncluded: top10.length,
+    totalScored: scored.length,
   });
 }
