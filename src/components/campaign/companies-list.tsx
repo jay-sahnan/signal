@@ -8,9 +8,11 @@ import {
   ExternalLink,
   Loader2,
   Mail,
+  Network,
   Sparkles,
   UserSearch,
 } from "lucide-react";
+import Link from "next/link";
 
 import { CompanyDetail } from "@/components/campaign/company-detail";
 import { ContactDetail } from "@/components/campaign/contact-detail";
@@ -415,6 +417,19 @@ export function CompaniesList({
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>
+                      )}
+                      {company.organization_id && (
+                        <Link
+                          href={`/companies/${company.organization_id}`}
+                          aria-label={`View org chart for ${company.name}`}
+                          title="View org chart"
+                          className={cn(
+                            "text-muted-foreground hover:text-foreground rounded p-1 transition-colors",
+                            ROW_FOCUS,
+                          )}
+                        >
+                          <Network className="h-3.5 w-3.5" />
+                        </Link>
                       )}
                       {!isCompanyEnriched(company) &&
                         !enrichingCompanyIds.has(company.id) && (
