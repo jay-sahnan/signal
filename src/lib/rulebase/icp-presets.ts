@@ -15,7 +15,7 @@ export interface ApolloPersonFilters {
 }
 
 export interface ICPPreset {
-  slug: "qa" | "complaints" | "sales-compliance";
+  slug: "qa" | "customer-intelligence" | "proactive-agents";
   name: string;
   description: string;
   rawMarkdown: string;
@@ -36,58 +36,58 @@ const QA_PRESET: ICPPreset = {
   slug: "qa",
   name: "QA",
   description:
-    "Companies with manual QA processes that need AI-powered 100% conversation coverage",
+    "Fintechs reviewing 2-5% of conversations after the fact — need real-time 100% coverage",
   rawMarkdown: loadMarkdown("targeting-qa.md"),
   icp: {
     industry:
-      "Financial services, insurance, fintech, SaaS, e-commerce, healthcare",
-    companySize: "200-5,000 employees",
-    geography: "US, UK, EU, ANZ",
+      "Neobanks, spend management, B2C fintech (lending, EWA, HEI, mortgage)",
+    companySize: "50-5,000 employees",
+    geography: "US, UK, EU",
     targetTitles: [
-      "VP/Director of Operations",
+      "Head of Operations",
+      "Head of Customer Service",
       "Head of CX",
-      "Director of Customer Experience",
-      "VP Customer Operations",
-      "QA Manager",
       "QA Lead",
-      "Quality Assurance Manager",
-      "Head of Customer Success",
+      "QA Manager",
+      "VP Customer Operations",
       "Director of Support",
+      "Head of Customer Experience",
     ],
     painPoints: [
-      "Low QA coverage rates (1-3%)",
-      "Manual QA with spreadsheets",
-      "High agent attrition from lack of coaching",
-      "Multi-channel QA burden",
-      "Scaling support team without scaling QA",
+      "Sampling 2-5% of conversations after the fact — blind to 95%+",
+      "QA talent wasted on grading tickets instead of driving strategy",
+      "Scaling support team without scaling QA headcount",
+      "Current QA tool is failing or too expensive (MaestroQA, Klaus, internal build)",
+      "No way to know what is going wrong until customers escalate or churn",
     ],
     keywords: [
       "QA automation",
-      "quality assurance",
-      "CSAT improvement",
+      "real-time QA",
+      "100% coverage",
       "agent coaching",
-      "contact center QA",
+      "conversation analytics",
+      "customer ops",
     ],
   },
   offering: {
     description:
-      "Rulebase is an AI-powered QA platform that evaluates 100% of customer conversations — calls, chat, email — against customisable scorecards, replacing manual sampling with full coverage.",
+      "Rulebase reads every customer conversation in real time and turns it into action. QA block: reviews 100% of interactions as they happen, not the 2-5% sampled after the fact.",
     valueProposition:
-      "Move from reviewing 1-3% of conversations to 100%. Find systemic quality issues, coach agents based on real data, and catch problems before they compound.",
+      "Stay on top of every customer conversation. Catch what is going wrong as it happens — before customers churn or complain.",
     differentiators: [
-      "100% automated QA coverage across all channels",
-      "AI + human QA working together with contested evaluation workflows",
-      "Tightly integrated with compliance and complaint detection",
-      "Deploys in days, not months — works with existing Zendesk/Aircall stack",
+      "Real-time 100% coverage, not after-the-fact sampling",
+      "Built for financial services — CFPB, disputes, sponsor bank reporting baked in",
+      "Configurable in plain language — not rigid scorecards",
+      "Deploys in days — works with Zendesk, Intercom, Aircall",
     ],
   },
   positioning: {
-    angle: "QA coverage gap",
-    tone: "Direct, data-driven, focused on operational impact",
+    angle: "Stay on top of every customer conversation",
+    tone: "Direct, outcome-focused. Never say 'QA tool' — say 'AI for customer ops'",
     keyMessages: [
-      "Manual QA breaks down at scale — you're making decisions on a statistically insignificant sample",
-      "AI evaluates every conversation against your exact quality criteria",
-      "QA and compliance in one platform, not two separate tools",
+      "You're reviewing 2-5% of conversations after the fact. What about the other 95%?",
+      "Your best QA people should drive strategy, not grade tickets",
+      "Know before anything gets escalated — not after",
     ],
   },
   signalSlugs: [
@@ -95,240 +95,259 @@ const QA_PRESET: ICPPreset = {
     "compliance-qa-job-posting",
     "cx-team-scaling",
     "trustpilot-review-surge",
+    "platform-migration",
+    "ai-agent-deployment",
   ],
   apolloCompanyFilters: {
     q_organization_keyword_tags: [
-      "SaaS",
       "fintech",
-      "customer service",
+      "neobank",
+      "spend management",
+      "lending",
+      "payments",
       "financial services",
-      "insurance",
     ],
-    organization_num_employees_ranges: ["201,500", "501,1000", "1001,5000"],
+    organization_num_employees_ranges: [
+      "51,200",
+      "201,500",
+      "501,1000",
+      "1001,5000",
+    ],
     q_organization_job_titles: [
-      "QA Manager",
       "Head of CX",
-      "Quality Analyst",
-      "Director of Customer Experience",
+      "Head of Operations",
+      "QA Manager",
+      "Head of Customer Service",
       "VP Customer Operations",
     ],
   },
   apolloPersonFilters: {
     person_titles: [
-      "VP Operations",
+      "Head of Operations",
+      "Head of Customer Service",
       "Head of CX",
-      "Director of Customer Experience",
       "VP Customer Operations",
-      "QA Manager",
       "QA Lead",
+      "QA Manager",
       "Director of Support",
-      "Head of Customer Success",
+      "Head of Customer Experience",
+    ],
+    person_seniorities: ["manager", "senior", "director", "vp", "c_suite"],
+  },
+};
+
+const CUSTOMER_INTELLIGENCE_PRESET: ICPPreset = {
+  slug: "customer-intelligence",
+  name: "Customer Intelligence",
+  description:
+    "Fintechs that cannot see what is happening across conversations — no view by program, product line, or channel",
+  rawMarkdown: loadMarkdown("targeting-qa.md"),
+  icp: {
+    industry:
+      "Neobanks, spend management, B2C fintech (lending, EWA, HEI, mortgage)",
+    companySize: "50-5,000 employees",
+    geography: "US, UK, EU",
+    targetTitles: [
+      "Head of CX",
+      "VP Operations",
+      "Director of Support",
+      "Head of Customer Experience",
+      "VP Customer Operations",
+      "COO",
+      "Head of Product (consumer)",
+    ],
+    painPoints: [
+      "No cross-conversation view — cannot see patterns by product, channel, or program",
+      "Insights arrive too late — weekly/monthly reporting instead of real-time",
+      "Product and ops teams rely on anecdotal escalations, not data",
+      "Cannot measure what is driving churn, complaints, or CSAT drops",
+      "Manual tagging and spreadsheets for conversation categorization",
+    ],
+    keywords: [
+      "conversation intelligence",
+      "customer insights",
+      "voice of customer",
+      "CX analytics",
+      "real-time reporting",
+      "customer ops",
+    ],
+  },
+  offering: {
+    description:
+      "Rulebase reads every customer conversation in real time and turns it into action. Customer Intelligence block: understands what is happening across conversations by program, product line, and channel.",
+    valueProposition:
+      "See what is actually happening across every conversation — by product, channel, program. Real-time leading indicators, not lagging ones.",
+    differentiators: [
+      "Cross-conversation intelligence — patterns by product, channel, program",
+      "Real-time leading indicators, not end-of-week reports",
+      "Built for financial services — disputes, compliance, sponsor bank reporting",
+      "Configurable reports in plain language — 'weekly application drop-off report'",
+    ],
+  },
+  positioning: {
+    angle: "Real-time leading indicators across every conversation",
+    tone: "Strategic, insight-focused. Frame as 'agents on the loop, not in the loop'",
+    keyMessages: [
+      "You have thousands of conversations happening. Do you know what they're telling you?",
+      "Real-time leading indicators, not lagging ones",
+      "Agents on the loop, not in the loop — surface what matters without waiting for escalations",
+    ],
+  },
+  signalSlugs: [
+    "new-leader-hired",
+    "cx-team-scaling",
+    "trustpilot-review-surge",
+    "product-launch",
+    "ai-agent-deployment",
+  ],
+  apolloCompanyFilters: {
+    q_organization_keyword_tags: [
+      "fintech",
+      "neobank",
+      "spend management",
+      "lending",
+      "payments",
+      "financial services",
+    ],
+    organization_num_employees_ranges: [
+      "51,200",
+      "201,500",
+      "501,1000",
+      "1001,5000",
+    ],
+    q_organization_job_titles: [
+      "Head of CX",
+      "VP Operations",
+      "Director of Support",
+      "Head of Customer Experience",
+      "COO",
+    ],
+  },
+  apolloPersonFilters: {
+    person_titles: [
+      "Head of CX",
+      "VP Operations",
+      "Director of Support",
+      "Head of Customer Experience",
+      "VP Customer Operations",
+      "COO",
     ],
     person_seniorities: ["director", "vp", "c_suite"],
   },
 };
 
-const COMPLAINTS_PRESET: ICPPreset = {
-  slug: "complaints",
-  name: "Complaints",
+const PROACTIVE_AGENTS_PRESET: ICPPreset = {
+  slug: "proactive-agents",
+  name: "Proactive Agents",
   description:
-    "Auto finance and consumer lending companies failing to detect and capture customer complaints",
+    "Fintechs where disputes, complaints, and churn signals are caught too late — need agents that act from conversations",
   rawMarkdown: loadMarkdown("targeting-complaints.md"),
   icp: {
     industry:
-      "Auto finance, consumer lending, mortgage servicing, student loan servicing, credit unions",
-    companySize: "200-5,000 employees",
-    geography: "US",
+      "Neobanks, spend management, B2C fintech (lending, EWA, HEI, mortgage)",
+    companySize: "50-5,000 employees",
+    geography: "US, UK, EU",
     targetTitles: [
-      "Chief Compliance Officer",
-      "Head of Consumer Affairs",
-      "Complaints Manager",
-      "Complaints Director",
-      "VP Regulatory Affairs",
-      "Head of Customer Outcomes",
+      "Head of Operations",
+      "Head of CX",
+      "VP Customer Operations",
+      "Head of Disputes",
+      "Head of Complaints",
+      "Director of Customer Service",
+      "COO",
     ],
     painPoints: [
-      "Complaint undercounting — only catching what agents manually log",
-      "CFPB enforcement risk from systematic complaint handling failures",
-      "Rising Trustpilot/BBB complaints mirroring internal failures",
-      "Manual complaint logging is error-prone in high-volume servicing",
-      "No systematic way to detect implicit complaints across 100% of interactions",
+      "Disputes handled manually — slow intake, missed deadlines, high cost per dispute",
+      "Complaints caught after escalation, not at the point of conversation",
+      "Churn signals invisible until customer has already left",
+      "No automation from conversation to action — agents copy-paste between systems",
+      "High-effort tickets sit unnoticed until they become escalations",
     ],
     keywords: [
-      "UDAAP",
-      "CFPB",
-      "complaint management",
-      "consent order",
+      "dispute automation",
       "complaint detection",
-      "Consumer Duty",
+      "churn prevention",
+      "proactive CX",
+      "customer ops automation",
+      "real-time alerting",
     ],
   },
   offering: {
     description:
-      "Rulebase detects customer complaints across 100% of servicing, collections, and sales interactions — including implicit complaints agents routinely miss.",
+      "Rulebase reads every customer conversation in real time and turns it into action. Proactive Agents block: acts before customers churn or complain. Every agent originates from a conversation and its ticket.",
     valueProposition:
-      "Stop relying on agents to manually log complaints. Rulebase AI identifies every expression of dissatisfaction with citations and severity scoring, so you catch systemic issues before regulators do.",
+      "Stop finding problems after the fact. Dispute Agent handles intake to issuer filing at 1/10 the cost. Complaint Agent triages and auto-resolves low-risk 10x faster. Coaching turns QA findings into simulations.",
     differentiators: [
-      "Detects complaints agents miss — implicit dissatisfaction, not just formal escalations",
-      "Complaint detection integrated with QA and compliance in one platform",
-      "Audit-ready evidence with specific citations and timestamps",
-      "Deploys in days — integrates with existing telephony and CRM",
+      "Agents that originate from conversations — not bolted-on automation",
+      "Dispute Agent: intake to issuer filing at ~1/10 cost",
+      "Complaint Agent: triages and auto-resolves low-risk ~10x faster",
+      "Configurable in plain language: 'flag disputes open 5+ days'",
     ],
   },
   positioning: {
-    angle: "Complaint detection gap — what you're missing",
-    tone: "Urgent, regulatory-aware, evidence-driven",
+    angle: "Act before customers churn or complain",
+    tone: "Urgent, action-oriented. Lead with the cost of inaction — disputes, complaints, churn",
     keyMessages: [
-      "The CFPB uses your complaint data to prioritise enforcement — rising complaints are a leading indicator",
-      "Most lenders only capture complaints agents manually log — that's a fraction of actual dissatisfaction",
-      "Rulebase flags every expression of dissatisfaction with evidence, not just the ones that get escalated",
+      "Every conversation is telling you something. Are you acting on it?",
+      "Disputes at 1/10 the cost. Complaints resolved 10x faster. Configured in plain language.",
+      "Know before anything gets escalated — not after",
     ],
   },
   signalSlugs: [
-    "consent-order-enforcement",
     "new-leader-hired",
-    "rising-cfpb-complaints",
-    "trustpilot-review-surge",
-    "compliance-qa-job-posting",
-    "udaap-sales-practice-risk",
     "cx-team-scaling",
+    "trustpilot-review-surge",
+    "rising-cfpb-complaints",
+    "consent-order-enforcement",
+    "compliance-qa-job-posting",
   ],
   apolloCompanyFilters: {
     q_organization_keyword_tags: [
-      "auto finance",
-      "consumer lending",
-      "mortgage",
+      "fintech",
+      "neobank",
+      "spend management",
+      "lending",
+      "payments",
       "financial services",
-      "loan servicing",
     ],
-    organization_num_employees_ranges: ["201,500", "501,1000", "1001,5000"],
+    organization_num_employees_ranges: [
+      "51,200",
+      "201,500",
+      "501,1000",
+      "1001,5000",
+    ],
     q_organization_job_titles: [
-      "Complaints Manager",
-      "Chief Compliance Officer",
-      "Head of Consumer Affairs",
-      "VP Regulatory",
+      "Head of Operations",
+      "Head of CX",
+      "Head of Disputes",
+      "VP Customer Operations",
+      "Head of Complaints",
     ],
   },
   apolloPersonFilters: {
     person_titles: [
-      "Chief Compliance Officer",
-      "Head of Consumer Affairs",
-      "Complaints Manager",
-      "Complaints Director",
-      "VP Regulatory Affairs",
-      "Head of Customer Outcomes",
-      "General Counsel",
+      "Head of Operations",
+      "Head of CX",
+      "VP Customer Operations",
+      "Head of Disputes",
+      "Head of Complaints",
+      "Director of Customer Service",
+      "COO",
     ],
-    person_seniorities: ["director", "vp", "c_suite"],
-  },
-};
-
-const SALES_COMPLIANCE_PRESET: ICPPreset = {
-  slug: "sales-compliance",
-  name: "Sales Compliance",
-  description:
-    "Auto finance and lending companies with unmonitored sales conversations violating UDAAP, TILA, ECOA",
-  rawMarkdown: loadMarkdown("targeting-sales-compliance.md"),
-  icp: {
-    industry:
-      "Auto finance, consumer lending, mortgage origination, student lending, credit unions with lending",
-    companySize: "200-5,000 employees",
-    geography: "US",
-    targetTitles: [
-      "Chief Compliance Officer",
-      "VP of Risk",
-      "Sales Compliance Manager",
-      "Fair Lending Officer",
-      "Head of Sales",
-      "VP Regulatory Affairs",
-    ],
-    painPoints: [
-      "Sales reps misrepresenting loan terms without detection",
-      "No systematic compliance monitoring across 100% of sales calls",
-      "UDAAP violations only caught by examiners or lawsuits",
-      "Dealer network is highest-risk and hardest to monitor",
-      "Manual compliance monitoring covers <5% of conversations",
-    ],
-    keywords: [
-      "UDAAP",
-      "fair lending",
-      "TILA",
-      "SCRA",
-      "sales compliance",
-      "CFPB exam",
-      "consent order",
-    ],
-  },
-  offering: {
-    description:
-      "Rulebase monitors 100% of sales conversations for compliance violations — UDAAP, TILA, ECOA, SCRA — with specific evidence citations for each finding.",
-    valueProposition:
-      "Stop finding out about sales compliance violations from examiners. Rulebase catches misrepresentations, missing disclosures, and high-pressure tactics in real-time across every call.",
-    differentiators: [
-      "100% sales conversation coverage — not a 2% sample",
-      "Audit-ready evidence with quotes and timestamps for each violation",
-      "Sales compliance + QA + complaints in one platform",
-      "Deploys in days for mid-market lenders — no 6-month Verint rollout",
-    ],
-  },
-  positioning: {
-    angle: "Sales compliance monitoring gap",
-    tone: "Regulatory-urgent, specific, enforcement-aware",
-    keyMessages: [
-      "A single UDAAP enforcement action can cost 10-100x what prevention would",
-      "The CFPB has made auto lending a top enforcement priority — sales practices are in the crosshairs",
-      "Rulebase monitors every sales call against your compliance criteria with specific evidence",
-    ],
-  },
-  signalSlugs: [
-    "consent-order-enforcement",
-    "new-leader-hired",
-    "rising-cfpb-complaints",
-    "udaap-sales-practice-risk",
-    "compliance-qa-job-posting",
-    "cx-team-scaling",
-    "trustpilot-review-surge",
-  ],
-  apolloCompanyFilters: {
-    q_organization_keyword_tags: [
-      "auto finance",
-      "consumer lending",
-      "mortgage",
-      "auto loans",
-      "financial services",
-    ],
-    organization_num_employees_ranges: ["201,500", "501,1000", "1001,5000"],
-    q_organization_job_titles: [
-      "Sales Compliance",
-      "Fair Lending",
-      "Chief Compliance Officer",
-      "VP Risk",
-    ],
-  },
-  apolloPersonFilters: {
-    person_titles: [
-      "Chief Compliance Officer",
-      "VP of Risk",
-      "Sales Compliance Manager",
-      "Fair Lending Officer",
-      "Head of Sales",
-      "VP Regulatory Affairs",
-      "General Counsel",
-    ],
-    person_seniorities: ["director", "vp", "c_suite"],
+    person_seniorities: ["manager", "senior", "director", "vp", "c_suite"],
   },
 };
 
 export const PRESETS: Record<string, ICPPreset> = {
   qa: QA_PRESET,
-  complaints: COMPLAINTS_PRESET,
-  "sales-compliance": SALES_COMPLIANCE_PRESET,
+  "customer-intelligence": CUSTOMER_INTELLIGENCE_PRESET,
+  "proactive-agents": PROACTIVE_AGENTS_PRESET,
 };
 
 export const PRESET_LIST: ICPPreset[] = [
   QA_PRESET,
-  COMPLAINTS_PRESET,
-  SALES_COMPLIANCE_PRESET,
+  CUSTOMER_INTELLIGENCE_PRESET,
+  PROACTIVE_AGENTS_PRESET,
 ];
 
 export function getPreset(slug: string): ICPPreset | null {

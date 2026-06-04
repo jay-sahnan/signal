@@ -92,10 +92,10 @@ export async function POST(request: Request) {
     : [];
 
   const presetName =
-    campaign?.icp_preset_slug === "complaints"
-      ? "Complaints"
-      : campaign?.icp_preset_slug === "sales-compliance"
-        ? "Sales Compliance"
+    campaign?.icp_preset_slug === "customer-intelligence"
+      ? "Customer Intelligence"
+      : campaign?.icp_preset_slug === "proactive-agents"
+        ? "Proactive Agents"
         : "QA";
 
   const email = await generateEmail({

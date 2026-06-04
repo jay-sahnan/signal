@@ -75,133 +75,133 @@ const SEED_COMPANIES: SeedCompany[] = [
   {
     name: "Westlake Financial",
     domain: "westlakefinancial.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context:
       "$44M CFPB consent order history, independent subprime auto lender",
   },
   {
     name: "Credit Acceptance",
     domain: "creditacceptance.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context:
       "Subprime auto finance, heavy CFPB scrutiny, high complaint volumes",
   },
   {
     name: "DT Acceptance",
     domain: "dtacceptance.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Independent subprime auto lender, deep subprime focus",
   },
   {
     name: "DriveTime",
     domain: "drivetime.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context:
       "BHPH dealer group, aggressive collections, vulnerable consumer base",
   },
   {
     name: "CarMax Auto Finance",
     domain: "carmax.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Major auto finance, high volume servicing",
   },
   {
     name: "Ally Financial",
     domain: "ally.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "$98M consent order history, major auto lender",
   },
   {
     name: "GM Financial",
     domain: "gmfinancial.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Captive finance, massive origination volume",
   },
   {
     name: "Toyota Motor Credit",
     domain: "toyotafinancial.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Captive finance, high volume, CFPB supervised",
   },
   {
     name: "Ford Motor Credit",
     domain: "ford.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Captive finance, high volume, CFPB supervised",
   },
   {
     name: "Lendbuzz",
     domain: "lendbuzz.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context:
       "Digital auto lender, fast-growing, compliance infrastructure lagging growth",
   },
   {
     name: "Caribou",
     domain: "caribou.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Digital auto refinancing, fast-growing fintech",
   },
   {
     name: "Capital One Auto",
     domain: "capitalone.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context:
       "Massive auto lending portfolio, CFPB supervised, high complaint volume",
   },
   {
     name: "Santander Consumer USA",
     domain: "santanderconsumerusa.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Subprime auto lender, multiple enforcement actions, high risk",
   },
   {
     name: "AmeriCredit",
     domain: "gmfinancial.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "GM Financial subsidiary, subprime auto lending",
   },
   {
     name: "Exeter Finance",
     domain: "exeterfinance.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Subprime auto lender, PE-backed, scaling fast",
   },
   {
     name: "Carvana",
     domain: "carvana.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context:
       "Online auto dealer + financing, high complaint volume, recent restructuring",
   },
   {
     name: "Vroom Finance",
     domain: "vroom.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Online auto dealer, consumer complaints",
   },
   {
     name: "World Omni Financial",
     domain: "worldomni.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Auto finance subsidiary of Southeast Toyota",
   },
   {
     name: "ACA (American Credit Acceptance)",
     domain: "americancreditacceptance.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Subprime auto lender, compliance risk",
   },
   {
     name: "Prestige Financial",
     domain: "gopfs.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Deep subprime auto lender",
   },
   {
     name: "United Auto Credit",
     domain: "unitedautocredit.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Subprime auto lender, dealer network",
   },
 
@@ -211,139 +211,139 @@ const SEED_COMPANIES: SeedCompany[] = [
   {
     name: "LendingClub",
     domain: "lendingclub.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "High origination volume personal loans, CFPB supervised",
   },
   {
     name: "Upgrade",
     domain: "upgrade.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Personal loan/installment lender, high volume",
   },
   {
     name: "Avant",
     domain: "avant.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Near-prime personal loans, high complaint risk",
   },
   {
     name: "Best Egg",
     domain: "bestegg.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Personal loan originator, consumer lending",
   },
   {
     name: "Oportun",
     domain: "oportun.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Community lending, CFPB scrutiny",
   },
   {
     name: "loanDepot",
     domain: "loandepot.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Mortgage servicer, one of most-complained-about at CFPB",
   },
   {
     name: "Newrez",
     domain: "newrez.com",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Mortgage servicer, high CFPB complaint volumes",
   },
   {
     name: "Mr. Cooper",
     domain: "mrcooper.com",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Large mortgage servicer, CFPB supervised",
   },
   {
     name: "Flagstar",
     domain: "flagstar.com",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Mortgage servicer, high complaint volume",
   },
   {
     name: "Prosper",
     domain: "prosper.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "P2P lending marketplace, consumer lending",
   },
   {
     name: "Upstart",
     domain: "upstart.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "AI lending platform, high origination, fair lending scrutiny",
   },
   {
     name: "Pagaya",
     domain: "pagaya.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "AI lending infrastructure, powering bank lending decisions",
   },
   {
     name: "Freedom Financial",
     domain: "freedomfinancialnetwork.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Debt settlement, high complaint volume, regulatory risk",
   },
   {
     name: "Navient",
     domain: "navient.com",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Student loan servicer, multiple state AG actions",
   },
   {
     name: "Nelnet",
     domain: "nelnet.com",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Student loan servicer, high volume",
   },
   {
     name: "OneMain Financial",
     domain: "onemainfinancial.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Branch-based consumer lender, high volume personal loans",
   },
   {
     name: "Mariner Finance",
     domain: "marinerfinance.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Consumer finance, branch network, compliance risk",
   },
   {
     name: "Regional Finance",
     domain: "regionalfinance.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Consumer finance branches, underserved markets",
   },
   {
     name: "Rocket Mortgage",
     domain: "rocketmortgage.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Largest mortgage lender, massive call center operations",
   },
   {
     name: "UWM (United Wholesale Mortgage)",
     domain: "uwm.com",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Wholesale mortgage giant, broker compliance oversight",
   },
   {
     name: "PennyMac",
     domain: "pennymac.com",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Large mortgage servicer, growing portfolio",
   },
   {
     name: "Caliber Home Loans",
     domain: "caliberhomeloans.com",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Mortgage servicer, mid-market",
   },
   {
     name: "Planet Home Lending",
     domain: "planethomelending.com",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Mortgage lender/servicer, growing portfolio",
   },
 
@@ -353,31 +353,31 @@ const SEED_COMPANIES: SeedCompany[] = [
   {
     name: "Navy Federal Credit Union",
     domain: "navyfederal.org",
-    presets: ["complaints", "sales-compliance"],
+    presets: ["proactive-agents"],
     context: "Largest CU, recent CFPB scrutiny, massive member base",
   },
   {
     name: "Pentagon Federal Credit Union",
     domain: "penfed.org",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Large CU, auto and personal lending",
   },
   {
     name: "USAA",
     domain: "usaa.com",
-    presets: ["complaints", "qa"],
+    presets: ["proactive-agents", "qa"],
     context: "Large military bank, massive call center, high CX expectations",
   },
   {
     name: "Suncoast Credit Union",
     domain: "suncoastcreditunion.com",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Large FL credit union, growing lending",
   },
   {
     name: "Golden 1 Credit Union",
     domain: "golden1.com",
-    presets: ["complaints"],
+    presets: ["proactive-agents"],
     context: "Large CA credit union",
   },
 
@@ -405,7 +405,7 @@ const SEED_COMPANIES: SeedCompany[] = [
   {
     name: "Hometap",
     domain: "hometap.com",
-    presets: ["qa", "sales-compliance"],
+    presets: ["qa", "proactive-agents"],
     context: "Home equity fintech, sales-led, regulated product",
   },
   {
@@ -417,7 +417,7 @@ const SEED_COMPANIES: SeedCompany[] = [
   {
     name: "SoFi",
     domain: "sofi.com",
-    presets: ["complaints", "sales-compliance", "qa"],
+    presets: ["proactive-agents", "qa"],
     context: "Multi-product fintech, high growth, scaling CX",
   },
   {
@@ -441,19 +441,19 @@ const SEED_COMPANIES: SeedCompany[] = [
   {
     name: "Chime",
     domain: "chime.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Neobank, high consumer volume, CFPB complaints",
   },
   {
     name: "Affirm",
     domain: "affirm.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "BNPL, high consumer volume, regulatory scrutiny",
   },
   {
     name: "Klarna",
     domain: "klarna.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "BNPL, massive CX volume, scaling AI agents",
   },
   {
@@ -501,73 +501,73 @@ const SEED_COMPANIES: SeedCompany[] = [
   {
     name: "Wise",
     domain: "wise.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Cross-border payments, millions of users, regulated globally",
   },
   {
     name: "Revolut",
     domain: "revolut.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Neobank, 40M+ users, massive CX volume, regulatory scrutiny",
   },
   {
     name: "Monzo",
     domain: "monzo.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "UK neobank, high consumer volume, FCA regulated",
   },
   {
     name: "Starling Bank",
     domain: "starlingbank.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "UK digital bank, growing rapidly",
   },
   {
     name: "N26",
     domain: "n26.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "EU neobank, regulatory issues, CX scaling",
   },
   {
     name: "Dave",
     domain: "dave.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "US neobank, consumer lending, CFPB supervised",
   },
   {
     name: "MoneyLion",
     domain: "moneylion.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Consumer fintech, lending + banking, high volume",
   },
   {
     name: "Current",
     domain: "current.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "US neobank, consumer banking",
   },
   {
     name: "Varo Bank",
     domain: "varomoney.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Digital bank, chartered, CFPB supervised",
   },
   {
     name: "Green Dot",
     domain: "greendot.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Banking platform, prepaid cards, high consumer volume",
   },
   {
     name: "Robinhood",
     domain: "robinhood.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Trading platform, massive user base, regulatory scrutiny",
   },
   {
     name: "Coinbase",
     domain: "coinbase.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Crypto exchange, large support team, complaint volume",
   },
   {
@@ -579,13 +579,13 @@ const SEED_COMPANIES: SeedCompany[] = [
   {
     name: "Square / Block",
     domain: "squareup.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Payments + banking, high consumer volume",
   },
   {
     name: "PayPal",
     domain: "paypal.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Massive payment platform, high complaint volume, CFPB data",
   },
   {
@@ -644,19 +644,19 @@ const SEED_COMPANIES: SeedCompany[] = [
   {
     name: "Lemonade",
     domain: "lemonade.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Insurtech, AI-first claims, regulated, consumer complaints",
   },
   {
     name: "Root Insurance",
     domain: "joinroot.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Insurtech, mobile-first, growing complaints",
   },
   {
     name: "Hippo Insurance",
     domain: "hippo.com",
-    presets: ["qa", "complaints"],
+    presets: ["qa", "proactive-agents"],
     context: "Insurtech, home insurance, consumer CX",
   },
   {
@@ -827,7 +827,7 @@ interface DiscoveryConfig {
 
 const DISCOVERY_CONFIGS: DiscoveryConfig[] = [
   {
-    preset: "complaints",
+    preset: "proactive-agents",
     queries: [
       {
         query: "auto finance company servicing loans consumer lending",
@@ -856,7 +856,7 @@ const DISCOVERY_CONFIGS: DiscoveryConfig[] = [
     ],
   },
   {
-    preset: "sales-compliance",
+    preset: "proactive-agents",
     queries: [
       {
         query: "auto lending company sales finance origination consumer",
@@ -968,6 +968,7 @@ export async function discoverCompanies(
 // ── Signal Definitions ──────────────────────────────────────────────
 
 export interface SignalResult {
+  signalId: string;
   signalName: string;
   tier: 1 | 2 | 3 | 4;
   found: boolean;
@@ -978,166 +979,58 @@ export interface SignalResult {
   scoreBoost: number; // how many points this signal adds
 }
 
-interface SignalDef {
-  name: string;
+/** Shape of the config jsonb stored in the signals table. */
+interface SignalConfig {
+  query: string;
+  numResults?: number;
+  daysBack: number;
   tier: 1 | 2 | 3;
   scoreBoost: number;
-  presets: string[];
-  /** Exa query template. {company} and {domain} are replaced. */
-  query: string;
-  daysBack: number;
-  /** Static evidence URLs to always include (templates with {company}/{domain}). */
-  staticEvidence?: Array<{ urlTemplate: string; snippetTemplate: string }>;
-  /**
-   * Minimum hits to count as "found". Default 1.
-   * Higher threshold for vague signals reduces false positives.
-   */
   minHits?: number;
+  staticEvidence?: Array<{ urlTemplate: string; snippetTemplate: string }>;
 }
-
-const SIGNALS: SignalDef[] = [
-  // ── Tier 1: Compelled Buyer ────────────────────────────────
-  {
-    name: "Consent Order / Enforcement Action",
-    tier: 1,
-    scoreBoost: 5,
-    presets: ["complaints", "sales-compliance"],
-    query:
-      '"{company}" (consent order OR enforcement action OR CFPB fine OR civil money penalty OR recently settled OR settlement agreement) (2025 OR 2026)',
-    daysBack: 365,
-    staticEvidence: [
-      {
-        urlTemplate:
-          "https://www.consumerfinance.gov/enforcement/actions/?title={company}",
-        snippetTemplate: "CFPB enforcement actions for {company}",
-      },
-    ],
-  },
-
-  // ── Tier 2: Triggered Buyer ────────────────────────────────
-  {
-    name: "New Compliance / CX Leader Hired",
-    tier: 2,
-    scoreBoost: 4,
-    presets: ["complaints", "sales-compliance", "qa"],
-    query:
-      '"{company}" (hired OR appointed OR named OR joins) (Chief Compliance Officer OR Head of CX OR VP Customer Experience OR VP Operations OR CCO OR General Counsel) 2025 OR 2026',
-    daysBack: 90,
-    staticEvidence: [
-      {
-        urlTemplate: "https://www.linkedin.com/company/{domainClean}/people/",
-        snippetTemplate: "LinkedIn people at {company}",
-      },
-    ],
-  },
-  {
-    name: "Rising CFPB Complaints",
-    tier: 2,
-    scoreBoost: 4,
-    presets: ["complaints", "sales-compliance"],
-    query:
-      '"{company}" CFPB complaints (rising OR increasing OR surge OR record) 2025 OR 2026',
-    daysBack: 90,
-    staticEvidence: [
-      {
-        urlTemplate:
-          "https://www.consumerfinance.gov/data-research/consumer-complaints/search/?company={company}",
-        snippetTemplate: "CFPB complaint database for {company}",
-      },
-    ],
-  },
-  {
-    name: "Trustpilot / Public Review Deterioration",
-    tier: 2,
-    scoreBoost: 3,
-    presets: ["complaints"],
-    query:
-      '"{company}" (Trustpilot OR BBB) (complaints OR terrible service OR worst experience OR scam OR 1 star) 2025 OR 2026',
-    daysBack: 60,
-    staticEvidence: [
-      {
-        urlTemplate: "https://www.trustpilot.com/review/{domain}",
-        snippetTemplate: "Trustpilot reviews for {company}",
-      },
-    ],
-  },
-  {
-    name: "PE Acquisition / Ownership Change",
-    tier: 2,
-    scoreBoost: 3,
-    presets: ["complaints", "sales-compliance"],
-    query:
-      '"{company}" (acquired OR private equity OR new ownership OR funding round OR raises) 2025 OR 2026',
-    daysBack: 180,
-  },
-
-  // ── Tier 3: Active Buyer ───────────────────────────────────
-  {
-    name: "Compliance / QA Job Posting",
-    tier: 3,
-    scoreBoost: 2,
-    presets: ["complaints", "sales-compliance", "qa"],
-    query:
-      '"{company}" (hiring OR job posting OR career) (complaint OR QA Manager OR Quality Analyst OR compliance monitoring OR UDAAP OR fair lending) 2025 OR 2026',
-    daysBack: 30,
-    staticEvidence: [
-      {
-        urlTemplate: "https://www.linkedin.com/company/{domainClean}/jobs/",
-        snippetTemplate: "LinkedIn jobs at {company}",
-      },
-    ],
-  },
-  {
-    name: "AI Agent Deployment",
-    tier: 3,
-    scoreBoost: 2,
-    presets: ["qa"],
-    query:
-      '"{company}" (deployed OR launched OR rolling out) (AI agent OR AI chatbot OR voice AI OR conversational AI) customer service 2025 OR 2026',
-    daysBack: 90,
-  },
-  {
-    name: "UDAAP / Sales Practice Risk",
-    tier: 3,
-    scoreBoost: 2,
-    presets: ["sales-compliance"],
-    query:
-      '"{company}" (UDAAP violation OR misleading sales OR disclosure failure OR fair lending violation OR deceptive practice) 2025 OR 2026',
-    daysBack: 180,
-  },
-  {
-    name: "CX Team Scaling",
-    tier: 3,
-    scoreBoost: 1,
-    presets: ["qa"],
-    query:
-      '"{company}" (growing customer support OR expanding CX team OR scaling contact center OR hiring customer experience) 2025 OR 2026',
-    daysBack: 60,
-    minHits: 2,
-  },
-];
 
 function cleanDomainForLinkedIn(domain: string): string {
   return domain.replace(/^www\./, "").replace(/\.(com|co|io|net|org)$/i, "");
 }
 
+/**
+ * Fetch signal definitions from the database for the given preset,
+ * then run each signal's Exa query against the company.
+ */
 export async function runSignals(
   companyName: string,
   preset: string,
   domain?: string | null,
 ): Promise<SignalResult[]> {
-  const applicable = SIGNALS.filter((s) => s.presets.includes(preset));
+  const { getAdminClient } = await import("@/lib/supabase/admin");
+  const { getPresetSignalSlugs } = await import("@/lib/rulebase/icp-presets");
+
+  const slugs = getPresetSignalSlugs(preset);
+  if (slugs.length === 0) return [];
+
+  const supabase = getAdminClient();
+  const { data: dbSignals, error } = await supabase
+    .from("signals")
+    .select("id, name, slug, config")
+    .in("slug", slugs);
+
+  if (error || !dbSignals || dbSignals.length === 0) return [];
+
   const results: SignalResult[] = [];
   const cleanDomain = domain ? domain.replace(/^www\./, "") : "";
   const domainClean = cleanDomainForLinkedIn(cleanDomain);
 
-  for (const signal of applicable) {
-    const query = signal.query
+  for (const row of dbSignals) {
+    const cfg = row.config as SignalConfig | null;
+    if (!cfg?.query) continue;
+
+    const query = cfg.query
       .replace(/\{company\}/g, companyName)
       .replace(/\{domain\}/g, cleanDomain);
 
-    const hits = await exaSearch(query, 5, signal.daysBack);
-    const minHits = signal.minHits ?? 1;
+    const hits = await exaSearch(query, cfg.numResults ?? 5, cfg.daysBack);
+    const minHits = cfg.minHits ?? 1;
     const found = hits.length >= minHits;
 
     // Build evidence
@@ -1150,8 +1043,8 @@ export async function runSignals(
     }));
 
     // Add static evidence links
-    if (signal.staticEvidence) {
-      for (const se of signal.staticEvidence) {
+    if (cfg.staticEvidence) {
+      for (const se of cfg.staticEvidence) {
         evidence.push({
           url: se.urlTemplate
             .replace(/\{company\}/g, encodeURIComponent(companyName))
@@ -1167,7 +1060,6 @@ export async function runSignals(
     // Confidence: based on hit quality, not just count
     let confidence: "high" | "medium" | "low" = "low";
     if (found) {
-      // Check if any hit actually mentions the company name (not just vague match)
       const mentionsCompany = hits.some(
         (h) =>
           (h.text ?? h.title ?? "")
@@ -1186,8 +1078,9 @@ export async function runSignals(
     }
 
     results.push({
-      signalName: signal.name,
-      tier: signal.tier,
+      signalId: row.id as string,
+      signalName: row.name as string,
+      tier: cfg.tier,
       found,
       summary: found
         ? (hits[0].text ?? hits[0].title ?? "")
@@ -1198,7 +1091,7 @@ export async function runSignals(
       confidence,
       evidence: evidence.slice(0, 5),
       hits: hits.length,
-      scoreBoost: found ? signal.scoreBoost : 0,
+      scoreBoost: found ? cfg.scoreBoost : 0,
     });
   }
 
@@ -1268,9 +1161,10 @@ export function classifyICP(
   preset: string,
 ): { primary: string; secondary: string[]; reasoning: string } {
   const icpLabels: Record<string, string> = {
-    complaints: "Complaints Ops",
-    "sales-compliance": "Sales Compliance",
-    qa: "QA / Agent Performance",
+    qa: "QA — Real-time 100% Reviews",
+    "customer-intelligence":
+      "Customer Intelligence — Cross-conversation Insights",
+    "proactive-agents": "Proactive Agents — Act Before Churn/Complaints",
   };
 
   const primary = icpLabels[preset] ?? preset;
@@ -1285,23 +1179,34 @@ export function classifyICP(
     else if (bestTier === 2) reasoning += " (triggered — recent change event)";
   }
 
-  // Cross-sell signals
+  // Cross-sell signals — all three blocks serve the same buyer, different entry points
   if (
-    preset === "complaints" &&
+    preset !== "qa" &&
     fired.some(
       (s) => s.signalName.includes("QA") || s.signalName.includes("CX"),
     )
   ) {
-    secondary.push("QA / Agent Performance");
+    secondary.push("QA — Real-time 100% Reviews");
   }
   if (
-    preset === "sales-compliance" &&
+    preset !== "proactive-agents" &&
     fired.some(
       (s) =>
-        s.signalName.includes("Complaint") || s.signalName.includes("CFPB"),
+        s.signalName.includes("Complaint") ||
+        s.signalName.includes("CFPB") ||
+        s.signalName.includes("Dispute"),
     )
   ) {
-    secondary.push("Complaints Ops");
+    secondary.push("Proactive Agents — Act Before Churn/Complaints");
+  }
+  if (
+    preset !== "customer-intelligence" &&
+    fired.some(
+      (s) =>
+        s.signalName.includes("Product") || s.signalName.includes("Scaling"),
+    )
+  ) {
+    secondary.push("Customer Intelligence — Cross-conversation Insights");
   }
 
   return { primary, secondary, reasoning };
@@ -1352,11 +1257,11 @@ export function generateOutreach(
   const first = contactName ?? "there";
 
   const pitchAngles: Record<string, string> = {
-    complaints:
-      "We detect 100% of complaints — including the 70% agents never log — before they become enforcement actions.",
-    "sales-compliance":
-      "We monitor every sales call for UDAAP, disclosure, and fair lending violations with auditable evidence examiners want to see.",
-    qa: "We replace 1-3% manual sampling with 100% AI-powered QA across every channel.",
+    qa: "We read every customer conversation in real time — 100% coverage, not the 2-5% you sample after the fact.",
+    "customer-intelligence":
+      "We show you what is happening across every conversation — by product, channel, program. Real-time leading indicators, not lagging ones.",
+    "proactive-agents":
+      "We act before customers churn or complain. Disputes at 1/10 the cost. Complaints resolved 10x faster. Configured in plain language.",
   };
   const pitchAngle = pitchAngles[preset] ?? pitchAngles.qa;
 
@@ -1415,7 +1320,7 @@ export function generateOutreach(
     creativePlay = `Create a "CFPB Exam Prep Box" — branded folder with: (1) top 5 UDAAP violations in auto finance this year, (2) mock exam checklist. FedEx to ${first} at ${companyName}. Note: "For when the examiner calls. — Gideon"`;
   } else {
     // Generic fallback based on preset
-    if (preset === "complaints" || preset === "sales-compliance") {
+    if (preset === "proactive-agents" || preset === "proactive-agents") {
       linkedinNote = `Hi ${first} — we help lenders like ${companyName} catch the 70% of complaints agents never log. Would love to connect.`;
       message = `Hi ${first},\n\nQuick question: what percentage of customer complaints at ${companyName} do you think actually get logged?\n\nIndustry average is about 30%. The rest — implicit dissatisfaction, vague frustration, "I want to speak to someone else" — never makes it into a report.\n\nRulebase catches all of it. Worth 15 min?`;
       callOpener = `Hi ${first} — if I told you most lenders only capture about a third of actual complaints, would that surprise you?`;

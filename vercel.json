@@ -3,6 +3,10 @@
     {
       "path": "/api/pipeline",
       "schedule": "0 8 * * 1-5"
+    },
+    {
+      "path": "/api/posthog-digest",
+      "schedule": "30 8 * * 1-5"
     }
   ]
 }

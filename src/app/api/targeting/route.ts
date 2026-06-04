@@ -4,7 +4,11 @@ import { NextRequest } from "next/server";
 
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 
-const VALID_SLUGS = ["qa", "complaints", "sales-compliance"] as const;
+const VALID_SLUGS = [
+  "qa",
+  "customer-intelligence",
+  "proactive-agents",
+] as const;
 type Slug = (typeof VALID_SLUGS)[number];
 
 function slugToFilename(slug: Slug): string {
@@ -31,7 +35,7 @@ export async function GET(request: NextRequest) {
     return Response.json(
       {
         error:
-          "Invalid or missing slug. Must be one of: qa, complaints, sales-compliance",
+          "Invalid or missing slug. Must be one of: qa, customer-intelligence, proactive-agents",
       },
       { status: 400 },
     );
@@ -70,7 +74,7 @@ export async function POST(request: NextRequest) {
     return Response.json(
       {
         error:
-          "Invalid or missing slug. Must be one of: qa, complaints, sales-compliance",
+          "Invalid or missing slug. Must be one of: qa, customer-intelligence, proactive-agents",
       },
       { status: 400 },
     );

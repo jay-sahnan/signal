@@ -65,7 +65,47 @@ interface SignalQuery {
 }
 
 const SIGNAL_QUERIES: Record<string, SignalQuery[]> = {
-  complaints: [
+  qa: [
+    {
+      label: "CX/Ops hiring",
+      query:
+        '"{company}" hired OR hiring Head of CX OR Head of Operations OR VP Customer Experience OR QA Manager OR Head of Support',
+      daysBack: 14,
+    },
+    {
+      label: "AI agents",
+      query:
+        '"{company}" AI agent OR AI chatbot OR conversational AI customer service deployed',
+      daysBack: 14,
+    },
+    {
+      label: "Platform migration",
+      query:
+        '"{company}" replacing OR switching OR migrating QA OR quality assurance OR MaestroQA OR Klaus OR EvaluAgent',
+      daysBack: 30,
+    },
+  ],
+  "customer-intelligence": [
+    {
+      label: "CX/Ops hiring",
+      query:
+        '"{company}" hired OR hiring Head of CX OR VP Operations OR Director of Support OR Head of Customer Experience',
+      daysBack: 14,
+    },
+    {
+      label: "Scaling support",
+      query:
+        '"{company}" expanding customer support OR scaling CX team OR new contact center OR BPO partnership',
+      daysBack: 14,
+    },
+    {
+      label: "Product launch",
+      query:
+        '"{company}" launched OR launching new product OR new feature OR expanding into',
+      daysBack: 14,
+    },
+  ],
+  "proactive-agents": [
     {
       label: "Consumer complaints",
       query:
@@ -78,32 +118,10 @@ const SIGNAL_QUERIES: Record<string, SignalQuery[]> = {
         '"{company}" CFPB OR consent order OR enforcement action OR attorney general',
       daysBack: 30,
     },
-  ],
-  "sales-compliance": [
     {
-      label: "Regulatory",
+      label: "Dispute/churn signals",
       query:
-        '"{company}" CFPB OR consent order OR UDAAP OR fair lending violation',
-      daysBack: 30,
-    },
-    {
-      label: "Complaints",
-      query:
-        '"{company}" misled OR hidden fees OR deceptive site:trustpilot.com OR site:bbb.org',
-      daysBack: 14,
-    },
-  ],
-  qa: [
-    {
-      label: "CX hiring",
-      query:
-        '"{company}" hired OR hiring Head of CX OR VP Customer Experience OR QA Manager',
-      daysBack: 14,
-    },
-    {
-      label: "AI agents",
-      query:
-        '"{company}" AI agent OR AI chatbot OR conversational AI customer service deployed',
+        '"{company}" dispute volume OR churn rate OR customer attrition OR complaint surge',
       daysBack: 14,
     },
   ],
@@ -187,12 +205,59 @@ async function enrichWithFreshSignals(
   return results;
 }
 
+// ── 7-Step Sequence Action Recommender ──────────────────────────────
+
+/**
+ * Recommend the next action for a company based on the 7-step outreach
+ * sequence. Without persistent step tracking, we infer from available data:
+ * - No contact → Step 0 (find contact)
+ * - Has contact, no email → Step 1 (LinkedIn view)
+ * - Has contact + email → Step 3 (send signal-routed email)
+ *
+ * The daily briefing surfaces these so the team knows exactly what to do.
+ */
+function recommendAction(
+  company: CompanyWithSignals,
+  contact:
+    | { name: string; title: string | null; email: string | null }
+    | undefined,
+): string {
+  if (!contact) {
+    return "Step 0: Find Head of CX/Ops contact via Apollo";
+  }
+  if (!contact.email) {
+    return `Step 1: View ${contact.name}'s LinkedIn profile`;
+  }
+
+  // Determine signal type for routing
+  const signalLabels = company.signals.map((s) => s.label.toLowerCase());
+  const hasRegulatory = signalLabels.some(
+    (l) => l.includes("regulatory") || l.includes("complaint"),
+  );
+  const hasHiring = signalLabels.some(
+    (l) => l.includes("hiring") || l.includes("scaling"),
+  );
+  const hasProduct = signalLabels.some(
+    (l) => l.includes("product") || l.includes("ai"),
+  );
+
+  const signalType = hasRegulatory
+    ? "regulatory"
+    : hasHiring
+      ? "new-hire/scaling"
+      : hasProduct
+        ? "product-launch/AI"
+        : "ICP fit";
+
+  return `Step 3: Send signal-routed email (${signalType}) to ${contact.name}`;
+}
+
 // ── Main ─────────────────────────────────────────────────────────────
 
 const PRESET_LABELS: Record<string, string> = {
-  complaints: "Complaints",
-  "sales-compliance": "Sales Compliance",
   qa: "QA",
+  "customer-intelligence": "Customer Intelligence",
+  "proactive-agents": "Proactive Agents",
 };
 
 export async function generateAndPostBriefing(): Promise<{
@@ -208,7 +273,7 @@ export async function generateAndPostBriefing(): Promise<{
     throw new Error("Missing env vars");
   }
 
-  const presets = ["complaints", "sales-compliance", "qa"];
+  const presets = ["qa", "customer-intelligence", "proactive-agents"];
   const icpSummaries: Array<{
     preset: string;
     label: string;
@@ -216,6 +281,7 @@ export async function generateAndPostBriefing(): Promise<{
     withSignals: number;
     topScore: number;
     csvUrl: string;
+    enrichedCompanies: CompanyWithSignals[];
   }> = [];
 
   for (const preset of presets) {
@@ -300,10 +366,11 @@ export async function generateAndPostBriefing(): Promise<{
       withSignals,
       topScore,
       csvUrl: `${appUrl}/api/export-csv?preset=${preset}`,
+      enrichedCompanies: enriched,
     });
   }
 
-  // Format concise Slack message
+  // Format Slack message with per-company recommended actions
   const date = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -319,6 +386,26 @@ export async function generateAndPostBriefing(): Promise<{
         : "no fresh signals";
     message += `*${icp.label}:* ${icp.total} companies, ${signalNote}, top score ${icp.topScore}/10\n`;
     message += `<${icp.csvUrl}|Download ${icp.label} CSV>\n\n`;
+
+    // Show top 5 companies with recommended next action
+    const topCompanies = icp.enrichedCompanies;
+    if (topCompanies && topCompanies.length > 0) {
+      for (const co of topCompanies.slice(0, 5)) {
+        const contact = co.contacts[0];
+        const contactStr = contact
+          ? `${contact.name} (${contact.title ?? "?"})`
+          : "No contact — find via Apollo";
+        const topSignal =
+          co.signals.length > 0
+            ? co.signals[0].label
+            : (co.scoreReason ?? "ICP fit").slice(0, 40);
+        const nextAction = recommendAction(co, contact);
+        message += `  ${co.score ?? "?"}/10  *${co.name}* — ${topSignal}\n`;
+        message += `        Contact: ${contactStr}\n`;
+        message += `        Next: ${nextAction}\n`;
+      }
+      message += "\n";
+    }
   }
 
   const totalCompanies = icpSummaries.reduce((s, i) => s + i.total, 0);

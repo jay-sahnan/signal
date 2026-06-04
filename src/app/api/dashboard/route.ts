@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   const { supabase } = ctx;
 
   const { searchParams } = new URL(request.url);
-  const preset = searchParams.get("preset"); // qa | complaints | sales-compliance
+  const preset = searchParams.get("preset"); // qa | customer-intelligence | proactive-agents
 
   // Get campaigns filtered by preset
   let campaignQuery = supabase

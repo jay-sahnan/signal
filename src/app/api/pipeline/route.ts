@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   }
 
   const supabase = getAdminClient();
-  const presets = ["complaints", "sales-compliance", "qa"];
+  const presets = ["qa", "customer-intelligence", "proactive-agents"];
   const results: Array<{
     preset: string;
     discovered: number;
@@ -184,34 +184,21 @@ export async function POST(request: Request) {
         { onConflict: "campaign_id,organization_id" },
       );
 
-      // Store signal results
+      // Store signal results (signalId comes directly from the DB now)
       for (const signal of firedSignals) {
-        // Get signal ID from DB
-        const { data: signalRow } = await supabase
-          .from("signals")
-          .select("id")
-          .ilike(
-            "name",
-            `%${signal.signalName.split("(")[0].trim().split("/")[0].trim()}%`,
-          )
-          .limit(1)
-          .maybeSingle();
-
-        if (signalRow) {
-          await supabase.from("signal_results").insert({
-            signal_id: signalRow.id,
-            campaign_id: campaignId,
-            organization_id: orgId,
-            output: {
-              found: signal.found,
-              summary: signal.summary,
-              evidence: signal.evidence,
-              data: { tier: signal.tier, scoreBoost: signal.scoreBoost },
-              confidence: signal.confidence,
-            },
-            status: "success",
-          });
-        }
+        await supabase.from("signal_results").insert({
+          signal_id: signal.signalId,
+          campaign_id: campaignId,
+          organization_id: orgId,
+          output: {
+            found: signal.found,
+            summary: signal.summary,
+            evidence: signal.evidence,
+            data: { tier: signal.tier, scoreBoost: signal.scoreBoost },
+            confidence: signal.confidence,
+          },
+          status: "success",
+        });
       }
 
       scored++;

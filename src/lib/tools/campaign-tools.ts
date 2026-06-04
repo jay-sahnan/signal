@@ -53,7 +53,7 @@ export const saveCampaign = tool({
       .optional()
       .describe("Search criteria for finding companies"),
     icpPresetSlug: z
-      .enum(["qa", "complaints", "sales-compliance"])
+      .enum(["qa", "customer-intelligence", "proactive-agents"])
       .optional()
       .describe(
         "ICP preset to apply. Auto-populates ICP, offering, and positioning from the preset and enables mapped signals.",

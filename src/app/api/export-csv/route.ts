@@ -176,10 +176,13 @@ export async function GET(request: Request) {
       if (hasHiring) {
         return `Hi ${name},\n\nNoticed ${companyName} is building out the CX/compliance team. The first thing new leaders find is that QA covers 1-3% of conversations — not enough to spot systemic issues.\n\nRulebase gets you to 100% in days. Worth 15 min?`;
       }
-      if (presetSlug === "complaints" || presetSlug === "sales-compliance") {
-        return `Hi ${name},\n\nMost lenders we talk to are only catching complaints that agents manually flag — which is maybe 30% of actual dissatisfaction. The rest compounds silently.\n\nWe built Rulebase to catch 100% automatically. Relevant for ${companyName}?`;
+      if (presetSlug === "proactive-agents") {
+        return `Hi ${name},\n\nMost fintechs find out about disputes, complaints, and churn after the fact. Rulebase reads every conversation in real time and acts — disputes at 1/10 the cost, complaints resolved 10x faster.\n\nRelevant for ${companyName}?`;
       }
-      return `Hi ${name},\n\nMost CX teams review 1-3% of conversations. Rulebase evaluates 100% automatically and surfaces the patterns manual QA misses.\n\nRelevant for ${companyName}?`;
+      if (presetSlug === "customer-intelligence") {
+        return `Hi ${name},\n\nYou have thousands of customer conversations happening. Rulebase reads every one in real time and shows you what is happening — by product, channel, program. Leading indicators, not lagging ones.\n\nRelevant for ${companyName}?`;
+      }
+      return `Hi ${name},\n\nMost CX teams review 2-5% of conversations after the fact. Rulebase reads every conversation in real time and turns it into action — before customers churn or complain.\n\nRelevant for ${companyName}?`;
     }
 
     function makeLinkedIn(firstName: string): string {
