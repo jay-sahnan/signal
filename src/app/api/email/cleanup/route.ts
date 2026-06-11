@@ -6,7 +6,14 @@ import { getAdminClient } from "@/lib/supabase/admin";
  * - Deletes discarded drafts older than 7 days
  * - Deletes stale drafts (never sent) older than 30 days
  */
-export async function POST() {
+export async function POST(request: Request) {
+  // Cron/internal route — verify caller has the service-role key
+  const authHeader = request.headers.get("authorization") ?? "";
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey || authHeader !== `Bearer ${serviceKey}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = getAdminClient();
 
   const sevenDaysAgo = new Date(

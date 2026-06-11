@@ -265,7 +265,10 @@ export async function POST(request: Request) {
       const outreachBaseUrl = getBaseUrl();
       void fetch(`${outreachBaseUrl}/api/outreach/process`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        },
         body: JSON.stringify({
           type: "signal",
           signalId: config.signal_id,
