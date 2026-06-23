@@ -6,8 +6,10 @@ import { ChevronDown, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CsvUpload } from "@/components/campaign/csv-upload";
 import { ProfileSelector } from "@/components/campaign/profile-selector";
+import { ICPPresetSelector } from "@/components/campaign/icp-preset-selector";
 import { CampaignSignalsPopover } from "@/components/signals/campaign-signals-popover";
 import { useCampaign } from "@/lib/campaign-context";
+import { RULEBASE_CONFIG } from "@/lib/rulebase/config";
 import { cn } from "@/lib/utils";
 import type { Campaign } from "@/lib/types/campaign";
 
@@ -115,12 +117,19 @@ export function CampaignHeader({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <ICPPresetSelector
+            campaignId={campaign.id}
+            currentPreset={campaign.icp_preset_slug}
+            onPresetApplied={onDataChanged}
+          />
           <ProfileSelector
             campaignId={campaign.id}
             currentProfileId={campaign.profile_id}
             onProfileChanged={onProfileChanged}
           />
-          <SetUpOutreachButton campaignName={campaign.name} />
+          {!RULEBASE_CONFIG.hideOutreach && (
+            <SetUpOutreachButton campaignName={campaign.name} />
+          )}
           <CampaignSignalsPopover campaignId={campaign.id} />
           <CsvUpload campaignId={campaign.id} onImported={onDataChanged} />
         </div>

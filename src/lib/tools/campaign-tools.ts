@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getPreset, getPresetSignalSlugs } from "@/lib/rulebase/icp-presets";
 
 export const saveCampaign = tool({
   description:
@@ -51,6 +52,12 @@ export const saveCampaign = tool({
       })
       .optional()
       .describe("Search criteria for finding companies"),
+    icpPresetSlug: z
+      .enum(["qa", "customer-intelligence", "proactive-agents"])
+      .optional()
+      .describe(
+        "ICP preset to apply. Auto-populates ICP, offering, and positioning from the preset and enables mapped signals.",
+      ),
     notes: z.string().optional().describe("Free-form notes about the campaign"),
     profileId: z
       .string()
@@ -66,12 +73,28 @@ export const saveCampaign = tool({
       data: { user },
     } = await supabase.auth.getUser();
 
+    // If a preset is specified, merge its fields
+    const preset = input.icpPresetSlug ? getPreset(input.icpPresetSlug) : null;
+
+    const resolvedIcp = preset ? preset.icp : input.icp || {};
+    const resolvedOffering = preset ? preset.offering : input.offering || {};
+    const resolvedPositioning = preset
+      ? preset.positioning
+      : input.positioning || {};
+
     if (input.id) {
       const updateData: Record<string, unknown> = { name: input.name };
       if (input.status) updateData.status = input.status;
-      if (input.icp) updateData.icp = input.icp;
-      if (input.offering) updateData.offering = input.offering;
-      if (input.positioning) updateData.positioning = input.positioning;
+      if (preset) {
+        updateData.icp = resolvedIcp;
+        updateData.offering = resolvedOffering;
+        updateData.positioning = resolvedPositioning;
+        updateData.icp_preset_slug = preset.slug;
+      } else {
+        if (input.icp) updateData.icp = input.icp;
+        if (input.offering) updateData.offering = input.offering;
+        if (input.positioning) updateData.positioning = input.positioning;
+      }
       if (input.searchCriteria)
         updateData.search_criteria = input.searchCriteria;
       if (input.notes !== undefined) updateData.notes = input.notes;
@@ -86,7 +109,13 @@ export const saveCampaign = tool({
         .single();
 
       if (error) throw new Error(`Failed to update campaign: ${error.message}`);
-      return { campaign: data, action: "updated" };
+
+      // Auto-enable signals for preset
+      if (preset) {
+        await enablePresetSignals(supabase, input.id, preset.slug);
+      }
+
+      return { campaign: data, action: "updated", presetApplied: preset?.name };
     }
 
     const { data, error } = await supabase
@@ -94,19 +123,30 @@ export const saveCampaign = tool({
       .insert({
         name: input.name,
         status: input.status || "discovery",
-        icp: input.icp || {},
-        offering: input.offering || {},
-        positioning: input.positioning || {},
+        icp: resolvedIcp,
+        offering: resolvedOffering,
+        positioning: resolvedPositioning,
         search_criteria: input.searchCriteria || {},
         notes: input.notes,
         profile_id: input.profileId || null,
+        icp_preset_slug: preset?.slug || null,
         user_id: user?.id,
       })
       .select()
       .single();
 
     if (error) throw new Error(`Failed to create campaign: ${error.message}`);
-    return { campaign: data, action: "created" };
+
+    // Auto-enable signals for preset
+    if (preset && data) {
+      await enablePresetSignals(
+        supabase,
+        (data as Record<string, unknown>).id as string,
+        preset.slug,
+      );
+    }
+
+    return { campaign: data, action: "created", presetApplied: preset?.name };
   },
 });
 
@@ -176,3 +216,32 @@ export const listCampaigns = tool({
     return { campaigns: campaignsWithStats };
   },
 });
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+async function enablePresetSignals(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  campaignId: string,
+  presetSlug: string,
+) {
+  const signalSlugs = getPresetSignalSlugs(presetSlug);
+  if (signalSlugs.length === 0) return;
+
+  const { data: signals } = await supabase
+    .from("signals")
+    .select("id, slug")
+    .in("slug", signalSlugs);
+
+  if (!signals || signals.length === 0) return;
+
+  const upserts = signals.map((s) => ({
+    campaign_id: campaignId,
+    signal_id: s.id as string,
+    enabled: true,
+    config_override: {},
+  }));
+
+  await supabase
+    .from("campaign_signals")
+    .upsert(upserts, { onConflict: "campaign_id,signal_id" });
+}

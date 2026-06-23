@@ -9,116 +9,58 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { useCampaign } from "@/lib/campaign-context";
 import { useStreaming } from "@/lib/streaming-context";
-import { saveChat } from "@/lib/services/chat-history";
+import { saveChat, loadChat } from "@/lib/services/chat-history";
 
 const MIN_WIDTH = 360;
 const MAX_WIDTH_RATIO = 0.6;
 const DEFAULT_WIDTH = 480;
 
-function getSuggestions(pathname: string, campaignId: string | null): string[] {
-  if (campaignId && pathname.startsWith("/campaigns/")) {
+function getSuggestions(pathname: string): string[] {
+  if (pathname === "/icp") {
     return [
-      "Find more companies matching my ICP",
-      "Search for decision-makers at the top companies",
-      "Summarize this campaign's progress",
-      "Set up outreach for my top contacts",
-    ];
-  }
-
-  if (pathname === "/outreach") {
-    return [
-      "Show me the status of my active sequences",
-      "Set up a new outreach sequence",
-      "How many contacts are waiting for signals?",
-      "Send all approved drafts for my campaign",
-    ];
-  }
-
-  if (pathname.startsWith("/outreach/review")) {
-    return [
-      "Rewrite this email to be shorter",
-      "Make the subject line more compelling",
-      "Add a specific signal reference to this draft",
-      "Approve all remaining drafts",
-    ];
-  }
-
-  if (pathname === "/signals") {
-    return [
-      "Create a new signal to track",
-      "Show me all available signals",
-      "Test a signal against my companies",
-      "Which signals should I enable for my campaign?",
-    ];
-  }
-
-  if (pathname === "/tracking") {
-    return [
-      "Show me recent tracking changes",
-      "Set up tracking for all qualified companies",
-      "Which companies had hiring changes this week?",
-      "Adjust my tracking thresholds",
-    ];
-  }
-
-  if (pathname === "/profile") {
-    return [
-      "Update my profile with my company details",
-      "Create a new profile for a different offering",
-      "Show me all my profiles",
-      "Link a profile to my campaign",
-    ];
-  }
-
-  if (pathname === "/settings") {
-    return [
-      "Help me configure my email settings",
-      "Show me my API usage costs",
-      "Set up my AgentMail inbox",
-      "What's my current sending setup?",
+      "Enrich Westlake Financial and run signals",
+      "Find auto finance companies with CFPB complaints",
+      "Search for companies hiring compliance roles",
+      "Run the full pipeline for complaints ICP",
     ];
   }
 
   if (pathname === "/" || pathname === "") {
     return [
-      "Show me my campaign performance",
-      "Which contacts have replied recently?",
+      "Who should I reach out to this week?",
       "What signals fired this week?",
-      "Start a new outbound campaign",
+      "Find more companies for complaints ICP",
+      "Run signals on all new companies",
     ];
   }
 
-  // Default global suggestions
+  if (pathname.startsWith("/company/")) {
+    return [
+      "Enrich this company",
+      "Find decision-makers here",
+      "Run signals against this company",
+      "Generate outreach for top contacts",
+    ];
+  }
+
   return [
-    "Find SaaS companies in London",
-    "Search for AI startups on Y Combinator",
-    "Check hiring activity for stripe.com",
-    "Start a new outbound campaign",
+    "Find companies matching my ICP",
+    "Search for decision-makers",
+    "What signals fired this week?",
+    "Run the daily pipeline",
   ];
 }
 
-function pageContextFromPath(
-  pathname: string,
-  campaignId: string | null,
-): string {
+function pageContextFromPath(pathname: string): string {
   if (!pathname) return "Unknown page";
-  if (pathname === "/" || pathname === "") return "Overview dashboard";
-  if (pathname === "/signals")
-    return "Signals library (browse, toggle, create signals)";
-  if (pathname === "/tracking")
-    return "Tracking page (monitored companies and signal history)";
-  if (pathname === "/profile") return "Profiles page (user seller profiles)";
-  if (pathname === "/outreach")
-    return "Outreach dashboard (sequences, signal queue, kanban pipeline)";
-  if (pathname.startsWith("/outreach/review"))
-    return "Email review flow (approving/rejecting AI-drafted outreach emails)";
-  if (pathname === "/settings") return "Settings page";
-  if (pathname === "/chat") return "Chat home (recent conversations)";
+  if (pathname === "/" || pathname === "") return "Weekly signal feed";
+  if (pathname === "/icp")
+    return "ICP management — adding companies to targeting";
+  if (pathname.startsWith("/company/"))
+    return "Company detail page — viewing company signals and contacts";
+  if (pathname === "/chat") return "Chat home";
   if (pathname.startsWith("/chat/")) return "Inside a specific chat thread";
-  if (pathname.startsWith("/campaigns/") && campaignId) {
-    return `Campaign detail for campaign ${campaignId}`;
-  }
-  if (pathname.startsWith("/campaigns")) return "Campaigns list";
+  if (pathname === "/settings") return "Settings page";
   return `Page: ${pathname}`;
 }
 
@@ -126,12 +68,14 @@ interface AgentPanelInnerProps {
   chatId: string;
   initialMessages: UIMessage[];
   campaignId: string | null;
+  onChatSaved: () => void;
 }
 
 function AgentPanelInner({
   chatId,
   initialMessages,
   campaignId,
+  onChatSaved,
 }: AgentPanelInnerProps) {
   const [input, setInput] = useState("");
   const [width, setWidth] = useState(DEFAULT_WIDTH);
@@ -144,22 +88,22 @@ function AgentPanelInner({
   const didAutoSend = useRef(false);
 
   const { messages, sendMessage, status, stop } = useChat({
-    id: campaignId ? `campaign-${campaignId}` : `global-${chatId}`,
+    id: `agent-${chatId}`,
     messages: initialMessages,
     onFinish({ messages: allMessages }) {
       saveChat(chatId, allMessages, campaignId ?? undefined);
+      onChatSaved();
     },
   });
 
   const isLoading = status === "submitted" || status === "streaming";
 
   useEffect(() => {
-    if (isLoading)
-      return register(campaignId ? `campaign-${campaignId}` : "agent-panel");
-  }, [isLoading, register, campaignId]);
+    if (isLoading) return register("agent-panel");
+  }, [isLoading, register]);
 
   const buildRequestOptions = useCallback(() => {
-    const pageContext = pageContextFromPath(pathname ?? "", campaignId);
+    const pageContext = pageContextFromPath(pathname ?? "");
     const body: Record<string, unknown> = { pageContext };
     if (campaignId) body.campaignId = campaignId;
     return { body };
@@ -231,16 +175,14 @@ function AgentPanelInner({
       />
 
       <div className="flex shrink-0 items-center border-b px-4 py-3">
-        <span className="text-sm font-medium">
-          {campaignId ? "Campaign Agent" : "Agent"}
-        </span>
+        <span className="text-sm font-medium">Agent</span>
       </div>
 
       <ChatMessages
         messages={messages}
         isLoading={isLoading}
         onSuggestionClick={handleSuggestionClick}
-        suggestions={getSuggestions(pathname ?? "", campaignId)}
+        suggestions={getSuggestions(pathname ?? "")}
       />
 
       <ChatInput
@@ -255,48 +197,74 @@ function AgentPanelInner({
 }
 
 export function AgentPanel() {
-  const { agentOpen, activeCampaignId } = useCampaign();
-  const [loaded, setLoaded] = useState(false);
-  const [chatId, setChatId] = useState<string>("");
+  const {
+    agentOpen,
+    activeCampaignId,
+    activeChatId,
+    setActiveChatId,
+    bumpChatList,
+    consumeLoadChat,
+  } = useCampaign();
+  const [chatId, setChatId] = useState<string>(() => crypto.randomUUID());
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
-  const loadKeyRef = useRef<string | null>(null);
+  const [renderKey, setRenderKey] = useState(0);
+  const currentChatRef = useRef<string | null>(null);
 
-  // Always start a fresh chat when the panel opens — past history bloats context and cost.
+  // Handle loading a saved chat
   useEffect(() => {
-    if (!agentOpen) {
-      loadKeyRef.current = null;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLoaded(false);
+    if (!agentOpen) return;
+    const requestedId = consumeLoadChat();
+    if (!requestedId) return;
+    if (requestedId === currentChatRef.current) return;
+
+    // Load the saved chat
+    loadChat(requestedId).then((chat) => {
+      if (chat) {
+        currentChatRef.current = requestedId;
+        setChatId(requestedId);
+        setInitialMessages(chat.messages);
+        setActiveChatId(requestedId);
+        setRenderKey((k) => k + 1);
+      }
+    });
+  }, [agentOpen, consumeLoadChat, setActiveChatId]);
+
+  // When agent panel opens with no active chat, or activeChatId was cleared (New Chat), create a fresh one
+  useEffect(() => {
+    if (!agentOpen) return;
+    if (activeChatId === null && currentChatRef.current !== null) {
+      // "New Chat" was requested — reset
+      const newId = crypto.randomUUID();
+      currentChatRef.current = newId;
+      setChatId(newId);
+      setInitialMessages([]);
+      setActiveChatId(newId);
+      setRenderKey((k) => k + 1);
       return;
     }
-    const key = activeCampaignId ?? "__global__";
-    if (loadKeyRef.current === key) return;
-    loadKeyRef.current = key;
+    if (currentChatRef.current) return; // already have a chat
 
-    setChatId(crypto.randomUUID());
+    const newId = crypto.randomUUID();
+    currentChatRef.current = newId;
+    setChatId(newId);
     setInitialMessages([]);
-    setLoaded(true);
-  }, [agentOpen, activeCampaignId]);
+    setActiveChatId(newId);
+    setRenderKey((k) => k + 1);
+  }, [agentOpen, activeChatId, setActiveChatId]);
+
+  const handleChatSaved = useCallback(() => {
+    bumpChatList();
+  }, [bumpChatList]);
 
   if (!agentOpen) return null;
 
-  if (!loaded) {
-    return (
-      <div
-        className="border-border bg-background relative flex shrink-0 items-center justify-center border-l"
-        style={{ width: `${DEFAULT_WIDTH}px` }}
-      >
-        <div className="text-muted-foreground text-sm">Loading...</div>
-      </div>
-    );
-  }
-
   return (
     <AgentPanelInner
-      key={activeCampaignId ?? "__global__"}
+      key={`${chatId}-${renderKey}`}
       chatId={chatId}
       initialMessages={initialMessages}
       campaignId={activeCampaignId}
+      onChatSaved={handleChatSaved}
     />
   );
 }

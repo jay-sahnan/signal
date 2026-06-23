@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Upload } from "lucide-react";
+import { Upload, Sparkles, Loader2, CheckCircle2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 
 interface ParsedCompany {
   name: string;
@@ -166,14 +167,27 @@ function mapColumns(headers: string[], rows: string[][]): ParsedCompany[] {
   });
 }
 
+interface EnrichmentProgress {
+  total: number;
+  completed: number;
+  succeeded: number;
+  failed: number;
+  current: string | null;
+}
+
 export function CsvUpload({ campaignId, onImported }: CsvUploadProps) {
   const [open, setOpen] = useState(false);
   const [companies, setCompanies] = useState<ParsedCompany[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichProgress, setEnrichProgress] =
+    useState<EnrichmentProgress | null>(null);
   const [result, setResult] = useState<{
     imported: number;
     skipped: number;
+    enriched?: number;
+    enrichFailed?: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -184,6 +198,8 @@ export function CsvUpload({ campaignId, onImported }: CsvUploadProps) {
     setResult(null);
     setError(null);
     setImporting(false);
+    setEnriching(false);
+    setEnrichProgress(null);
   };
 
   const handleFile = useCallback((file: File) => {
@@ -222,7 +238,7 @@ export function CsvUpload({ campaignId, onImported }: CsvUploadProps) {
     [handleFile],
   );
 
-  const handleImport = async () => {
+  const handleImport = async (enrich = false) => {
     setImporting(true);
     setError(null);
     try {
@@ -236,12 +252,71 @@ export function CsvUpload({ campaignId, onImported }: CsvUploadProps) {
         setError(data.error || "Import failed");
         return;
       }
-      setResult({ imported: data.imported, skipped: data.skipped });
+
+      if (!enrich || !data.importedLinks?.length) {
+        setResult({ imported: data.imported, skipped: data.skipped });
+        onImported();
+        return;
+      }
+
+      // Start enrichment
+      setImporting(false);
+      setEnriching(true);
+      const links = data.importedLinks as Array<{
+        linkId: string;
+        orgId: string;
+        name: string;
+      }>;
+      const progress: EnrichmentProgress = {
+        total: links.length,
+        completed: 0,
+        succeeded: 0,
+        failed: 0,
+        current: null,
+      };
+      setEnrichProgress({ ...progress });
+
+      // Enrich in batches of 3 to avoid overwhelming the server
+      const BATCH_SIZE = 3;
+      for (let i = 0; i < links.length; i += BATCH_SIZE) {
+        const batch = links.slice(i, i + BATCH_SIZE);
+        progress.current = batch.map((l) => l.name).join(", ");
+        setEnrichProgress({ ...progress });
+
+        const results = await Promise.allSettled(
+          batch.map((link) =>
+            fetch("/api/enrich-company", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ companyId: link.linkId, campaignId }),
+            }),
+          ),
+        );
+
+        for (const r of results) {
+          progress.completed++;
+          if (r.status === "fulfilled" && r.value.ok) {
+            progress.succeeded++;
+          } else {
+            progress.failed++;
+          }
+        }
+        setEnrichProgress({ ...progress });
+      }
+
+      setEnriching(false);
+      setResult({
+        imported: data.imported,
+        skipped: data.skipped,
+        enriched: progress.succeeded,
+        enrichFailed: progress.failed,
+      });
       onImported();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed");
     } finally {
       setImporting(false);
+      setEnriching(false);
     }
   };
 
@@ -297,9 +372,37 @@ export function CsvUpload({ campaignId, onImported }: CsvUploadProps) {
             </div>
           )}
 
-          {result ? (
+          {enriching && enrichProgress ? (
+            <div className="space-y-4">
+              <div className="text-sm font-medium">
+                Enriching companies... ({enrichProgress.completed}/
+                {enrichProgress.total})
+              </div>
+              <Progress
+                value={(enrichProgress.completed / enrichProgress.total) * 100}
+                className="h-2"
+              />
+              {enrichProgress.current && (
+                <div className="text-muted-foreground text-xs truncate">
+                  Processing: {enrichProgress.current}
+                </div>
+              )}
+              <div className="flex gap-4 text-xs">
+                <span className="flex items-center gap-1 text-green-600">
+                  <CheckCircle2 className="h-3 w-3" />{" "}
+                  {enrichProgress.succeeded} enriched
+                </span>
+                {enrichProgress.failed > 0 && (
+                  <span className="flex items-center gap-1 text-red-500">
+                    <XCircle className="h-3 w-3" /> {enrichProgress.failed}{" "}
+                    failed
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : result ? (
             <div className="space-y-3">
-              <div className="bg-muted rounded-md px-4 py-3 text-sm">
+              <div className="bg-muted rounded-md px-4 py-3 text-sm space-y-1">
                 <p>
                   <strong>{result.imported}</strong> companies imported
                   {result.skipped > 0 && (
@@ -309,6 +412,18 @@ export function CsvUpload({ campaignId, onImported }: CsvUploadProps) {
                     </span>
                   )}
                 </p>
+                {result.enriched !== undefined && (
+                  <p className="text-green-600">
+                    <strong>{result.enriched}</strong> companies enriched with
+                    signals & contacts
+                    {result.enrichFailed ? (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        ({result.enrichFailed} failed)
+                      </span>
+                    ) : null}
+                  </p>
+                )}
               </div>
               <div className="flex justify-end">
                 <Button
@@ -405,10 +520,37 @@ export function CsvUpload({ campaignId, onImported }: CsvUploadProps) {
                 >
                   Cancel
                 </Button>
-                <Button size="sm" onClick={handleImport} disabled={importing}>
-                  {importing
-                    ? "Importing..."
-                    : `Import ${companies.length} ${companies.length === 1 ? "company" : "companies"}`}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleImport(false)}
+                  disabled={importing}
+                >
+                  {importing ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    `Import ${companies.length}`
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleImport(true)}
+                  disabled={importing}
+                >
+                  {importing ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-1.5 h-3 w-3" />
+                      Import & Enrich
+                    </>
+                  )}
                 </Button>
               </div>
             </div>

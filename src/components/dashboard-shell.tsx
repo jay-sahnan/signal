@@ -1,7 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { MessageCircle, X } from "lucide-react";
+import { MessageCircle, Plus } from "lucide-react";
 
 import { AgentPanel } from "@/components/agent-panel";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -15,15 +14,28 @@ import {
 import { CampaignProvider, useCampaign } from "@/lib/campaign-context";
 
 function HeaderAgentButton() {
-  const { activeCampaignId, agentOpen, setAgentOpen } = useCampaign();
-  const pathname = usePathname();
+  const { agentOpen, setAgentOpen, openAgentWith, setActiveChatId } =
+    useCampaign();
 
-  if (pathname?.startsWith("/chat")) return null;
-
-  const label = activeCampaignId ? "Campaign Agent" : "Agent";
+  const handleNewChat = () => {
+    // Force a new chat by clearing active chat and opening
+    setActiveChatId(null);
+    openAgentWith();
+  };
 
   return (
     <div className="flex items-center gap-0.5">
+      {agentOpen && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleNewChat}
+          aria-label="New chat"
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          New Chat
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="sm"
@@ -31,18 +43,8 @@ function HeaderAgentButton() {
         aria-pressed={agentOpen}
       >
         <MessageCircle className="mr-1.5 h-4 w-4" />
-        {label}
+        {agentOpen ? "Close" : "Agent"}
       </Button>
-      {agentOpen && (
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label="Close agent panel"
-          onClick={() => setAgentOpen(false)}
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      )}
     </div>
   );
 }

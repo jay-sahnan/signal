@@ -125,6 +125,8 @@ export default function CampaignDetailPage() {
             (row.readiness_tag as CampaignCompany["readiness_tag"]) || null,
           enrichment_data: (org.enrichment_data ||
             {}) as CampaignCompany["enrichment_data"],
+          suggested_approach: (row.suggested_approach as string) ?? null,
+          approach_generated_at: (row.approach_generated_at as string) ?? null,
           source: org.source as string | null,
           created_at: row.created_at as string,
           updated_at: row.updated_at as string,
@@ -167,6 +169,10 @@ export default function CampaignDetailPage() {
           score_reason: row.score_reason as string | null,
           readiness_tag:
             (row.readiness_tag as CampaignContact["readiness_tag"]) || null,
+          generated_email_subject:
+            (row.generated_email_subject as string) ?? null,
+          generated_email_body: (row.generated_email_body as string) ?? null,
+          email_generated_at: (row.email_generated_at as string) ?? null,
           source: person.source as string | null,
           created_at: row.created_at as string,
           updated_at: row.updated_at as string,

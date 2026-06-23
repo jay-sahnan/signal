@@ -24,6 +24,7 @@ export interface Campaign {
   name: string;
   status: string;
   profile_id: string | null;
+  icp_preset_slug: string | null;
   icp: ICP;
   offering: Offering;
   positioning: Positioning;
@@ -227,6 +228,8 @@ export interface CampaignCompany {
   status: "discovered" | "qualified" | "disqualified";
   readiness_tag: "ready_to_contact" | "monitoring" | "not_ready" | null;
   enrichment_data: CompanyEnrichmentData | Record<string, never>;
+  suggested_approach: string | null;
+  approach_generated_at: string | null;
   source: string | null;
   created_at: string;
   updated_at: string;
@@ -260,6 +263,9 @@ export interface CampaignContact {
   priority_score: number | null;
   score_reason: string | null;
   readiness_tag: "ready_to_contact" | "monitoring" | "not_ready" | null;
+  generated_email_subject: string | null;
+  generated_email_body: string | null;
+  email_generated_at: string | null;
   source: string | null;
   created_at: string;
   updated_at: string;

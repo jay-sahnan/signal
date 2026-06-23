@@ -107,11 +107,25 @@ export async function POST(request: Request) {
 
   const profile = await getProfileForPrompt(campaignId);
   const signals = campaignId ? await getActiveSignals(campaignId) : null;
+
+  // Fetch the campaign's ICP preset slug for system prompt injection
+  let icpPresetSlug: string | null = null;
+  if (campaignId) {
+    const { supabase } = ctx;
+    const { data: campaign } = await supabase
+      .from("campaigns")
+      .select("icp_preset_slug")
+      .eq("id", campaignId)
+      .maybeSingle();
+    icpPresetSlug = (campaign?.icp_preset_slug as string) ?? null;
+  }
+
   const systemPrompt = buildSystemPrompt({
     profile,
     campaignId,
     signals,
     pageContext,
+    icpPresetSlug,
   });
 
   const stream = createUIMessageStream({

@@ -1,22 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { SafeLink } from "@/components/safe-link";
 
 import {
-  Eye,
   LayoutDashboard,
-  Mail,
   MessageCircle,
-  MessageSquare,
+  Plus,
   Settings,
-  Target,
-  UserCircle,
-  Zap,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import { NavUser } from "@/components/nav-user";
-import { SidebarCampaigns } from "@/components/sidebar-campaigns";
-import { useCampaign } from "@/lib/campaign-context";
 import {
   Sidebar,
   SidebarContent,
@@ -30,42 +25,19 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
+import { useCampaign } from "@/lib/campaign-context";
+import { listChats, type ChatSummary } from "@/lib/services/chat-history";
 
 const navItems = [
   {
-    title: "Overview",
+    title: "Feed",
     url: "/",
     icon: LayoutDashboard,
   },
   {
-    title: "Chat",
-    url: "/chat",
-    icon: MessageCircle,
-  },
-  {
-    title: "Campaigns",
-    url: "/campaigns",
-    icon: Target,
-  },
-  {
-    title: "Signals",
-    url: "/signals",
-    icon: Zap,
-  },
-  {
-    title: "Tracking",
-    url: "/tracking",
-    icon: Eye,
-  },
-  {
-    title: "Outreach",
-    url: "/outreach",
-    icon: Mail,
-  },
-  {
-    title: "Profiles",
-    url: "/profile",
-    icon: UserCircle,
+    title: "ICP",
+    url: "/icp",
+    icon: SlidersHorizontal,
   },
 ];
 
@@ -75,8 +47,34 @@ const defaultUser = {
   avatar: "",
 };
 
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const mins = Math.round((now - then) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
-  const { activeCampaignId, setActiveCampaignId } = useCampaign();
+  const { chatListVersion, requestLoadChat, openAgentWith } = useCampaign();
+  const [chats, setChats] = useState<ChatSummary[]>([]);
+
+  useEffect(() => {
+    listChats(10).then(setChats);
+  }, [chatListVersion]);
+
+  const handleNewChat = () => {
+    openAgentWith();
+  };
 
   return (
     <Sidebar variant="inset" collapsible="icon" {...props}>
@@ -85,10 +83,10 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<SafeLink href="/" />}>
               <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                <span className="text-sm font-bold">S</span>
+                <span className="text-sm font-bold">R</span>
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">Signal</span>
+                <span className="truncate font-semibold">Rulebase</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -114,12 +112,38 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarSeparator />
-
-        <SidebarCampaigns
-          activeCampaignId={activeCampaignId}
-          onSelectCampaign={setActiveCampaignId}
-        />
+        {/* Chats section */}
+        <SidebarGroup>
+          <SidebarGroupLabel>
+            <span className="flex-1">Chats</span>
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="New Chat" onClick={handleNewChat}>
+                  <Plus />
+                  <span>New Chat</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              {chats.map((chat) => (
+                <SidebarMenuItem key={chat.id}>
+                  <SidebarMenuButton
+                    tooltip={chat.title}
+                    onClick={() => requestLoadChat(chat.id)}
+                  >
+                    <MessageCircle />
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-xs">{chat.title}</span>
+                      <span className="text-muted-foreground truncate text-[10px]">
+                        {timeAgo(chat.updated_at)}
+                      </span>
+                    </div>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
@@ -130,18 +154,6 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             >
               <Settings />
               <span>Settings</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              render={
-                <a href="mailto:jaysahnan31@gmail.com?subject=Signal%20feedback" />
-              }
-              tooltip="Feedback"
-              aria-label="Give feedback"
-            >
-              <MessageSquare />
-              <span>Feedback</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

@@ -73,6 +73,8 @@ export async function POST(request: Request) {
   );
 
   const seenDomains = new Set<string>();
+  const importedLinks: Array<{ linkId: string; orgId: string; name: string }> =
+    [];
   let imported = 0;
   let skipped = 0;
 
@@ -119,9 +121,14 @@ export async function POST(request: Request) {
       source: "csv",
     });
 
-    await linkOrganizationToCampaign(org.id, campaignId);
+    const link = await linkOrganizationToCampaign(org.id, campaignId);
+    importedLinks.push({
+      linkId: link.id,
+      orgId: org.id,
+      name: company.name.trim(),
+    });
     imported++;
   }
 
-  return Response.json({ imported, skipped });
+  return Response.json({ imported, skipped, importedLinks });
 }
