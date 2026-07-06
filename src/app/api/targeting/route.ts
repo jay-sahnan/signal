@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 
 const VALID_SLUGS = [
+  "revenue-agent",
   "qa",
   "customer-intelligence",
   "proactive-agents",
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     return Response.json(
       {
         error:
-          "Invalid or missing slug. Must be one of: qa, customer-intelligence, proactive-agents",
+          "Invalid or missing slug. Must be one of: revenue-agent, qa, customer-intelligence, proactive-agents",
       },
       { status: 400 },
     );
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
     return Response.json(
       {
         error:
-          "Invalid or missing slug. Must be one of: qa, customer-intelligence, proactive-agents",
+          "Invalid or missing slug. Must be one of: revenue-agent, qa, customer-intelligence, proactive-agents",
       },
       { status: 400 },
     );
