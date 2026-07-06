@@ -65,6 +65,38 @@ interface SignalQuery {
 }
 
 const SIGNAL_QUERIES: Record<string, SignalQuery[]> = {
+  "revenue-agent": [
+    {
+      label: "M&A / re-onboarding",
+      query:
+        '"{company}" acquired OR acquisition OR "book of business" OR "migrating accounts" OR re-onboard OR "absorbed accounts"',
+      daysBack: 180,
+    },
+    {
+      label: "Onboarding/KYB hiring",
+      query:
+        '"{company}" hiring "Onboarding Specialist" OR "Implementation Manager" OR "KYB Analyst" OR "Merchant Underwriting" OR "Activation Analyst"',
+      daysBack: 30,
+    },
+    {
+      label: "New market/license",
+      query:
+        '"{company}" license OR "new market" OR "expands to" OR "goes live in" payments OR banking OR remittance',
+      daysBack: 180,
+    },
+    {
+      label: "Revenue-ops leader",
+      query:
+        '"{company}" hired OR appointed COO OR CRO OR "Chief Revenue Officer" OR "Head of Onboarding" OR "Head of Implementation"',
+      daysBack: 90,
+    },
+    {
+      label: "Manual revenue recovery",
+      query:
+        '"{company}" reactivation OR "dormant accounts" OR "stalled onboarding" OR "recovered revenue" OR "reactivated merchants"',
+      daysBack: 180,
+    },
+  ],
   qa: [
     {
       label: "CX/Ops hiring",
@@ -182,7 +214,11 @@ async function enrichWithFreshSignals(
 
     // Boost score based on signals
     let adjustedScore = company.score ?? 7;
-    if (signals.some((s) => s.label === "Regulatory"))
+    if (
+      signals.some(
+        (s) => s.label === "Regulatory" || s.label === "M&A / re-onboarding",
+      )
+    )
       adjustedScore = Math.max(adjustedScore, 10);
     else if (
       signals.some(
@@ -255,6 +291,7 @@ function recommendAction(
 // ── Main ─────────────────────────────────────────────────────────────
 
 const PRESET_LABELS: Record<string, string> = {
+  "revenue-agent": "Revenue Agent",
   qa: "QA",
   "customer-intelligence": "Customer Intelligence",
   "proactive-agents": "Proactive Agents",
@@ -273,7 +310,12 @@ export async function generateAndPostBriefing(): Promise<{
     throw new Error("Missing env vars");
   }
 
-  const presets = ["qa", "customer-intelligence", "proactive-agents"];
+  const presets = [
+    "revenue-agent",
+    "qa",
+    "customer-intelligence",
+    "proactive-agents",
+  ];
   const icpSummaries: Array<{
     preset: string;
     label: string;
