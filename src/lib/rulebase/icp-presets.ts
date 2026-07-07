@@ -15,7 +15,7 @@ export interface ApolloPersonFilters {
 }
 
 export interface ICPPreset {
-  slug: "qa" | "customer-intelligence" | "proactive-agents";
+  slug: "revenue-agent" | "qa" | "customer-intelligence" | "proactive-agents";
   name: string;
   description: string;
   rawMarkdown: string;
@@ -31,6 +31,131 @@ function loadMarkdown(filename: string): string {
   const filePath = path.join(process.cwd(), "config", filename);
   return readFileSync(filePath, "utf8");
 }
+
+const REVENUE_AGENT_PRESET: ICPPreset = {
+  slug: "revenue-agent",
+  name: "Revenue Agent",
+  description:
+    "Fintechs where revenue is gated behind multi-step onboarding/activation — stalled cases nobody owns, revenue that never starts",
+  rawMarkdown: loadMarkdown("targeting-revenue-agent.md"),
+  icp: {
+    industry:
+      "Payment processors & merchant acquirers, neobanks/consumer fintech, spend management, benefits & HSA/FSA, retirement/401(k), lenders, remittance — revenue gated behind onboarding/activation",
+    companySize:
+      "50+ employees (no hard ceiling — size the deal to recovered revenue)",
+    geography: "US, UK, EU, Africa (multi-market processors)",
+    targetTitles: [
+      "COO",
+      "CRO",
+      "Chief Customer Officer",
+      "Head of Onboarding",
+      "Head of Implementation",
+      "Head of Activation",
+      "VP Operations",
+      "Head of Merchant Operations",
+      "Head of Revenue Operations",
+      "Head of Client Services",
+      "Director of Onboarding",
+      "Director of Implementation",
+    ],
+    painPoints: [
+      "Onboarding is non-linear — steps run in parallel, no single queue anyone owns",
+      "No timestamp tracking on where cases stall or why",
+      "Client-facing chasing falls entirely on the onboarding team; internal handoffs leave the client out of the loop",
+      "Context lost on reassignment across Salesforce, Zendesk, spreadsheets",
+      "Work spans weeks — ticket-based tooling cannot hold it together",
+      "A stall equals revenue that never starts, not just a bad CX metric",
+    ],
+    keywords: [
+      "onboarding automation",
+      "activation",
+      "merchant onboarding",
+      "KYB",
+      "time-to-revenue",
+      "stalled applications",
+      "revenue recovery",
+      "implementation",
+    ],
+  },
+  offering: {
+    description:
+      "Rulebase's Revenue Agent reads every onboarding/activation case, finds the stalled ones, and drives them to activation end-to-end — with real-time visibility, not a dashboard checked after the fact.",
+    valueProposition:
+      "Recover the revenue stuck in onboarding. Every stalled application chased to activation automatically — measured in TPV / funded accounts, not saved hours.",
+    differentiators: [
+      "Owns the stalled onboarding case end-to-end — the work nobody else owns",
+      "Per-market compliance depth generic agent platforms won't do (Paystack multi-market)",
+      "Speaks in recovered revenue (TPV, funded accounts) — justifies outcome-based pricing",
+      "One real stuck case traced to resolution beats a dashboard; production in days, not a 2-year build",
+    ],
+  },
+  positioning: {
+    angle: "Recover the revenue stuck in onboarding",
+    tone: "Revenue-first. Speak in the customer's metric (TPV, funded/enrolled accounts). Anchor high vs recovered revenue, never saved hours. Never route through compliance.",
+    keyMessages: [
+      "A stalled onboarding is revenue that never starts — not a CX metric.",
+      "One re-engagement pass found ~$1M. What would continuous coverage return?",
+      "Why did you find out days later? The Revenue Agent flags the stall the moment it happens and chases it to activation.",
+    ],
+  },
+  signalSlugs: [
+    "ma-book-of-business-transfer",
+    "sponsor-bank-baas-change",
+    "new-revenue-ops-leader",
+    "new-market-license",
+    "activation-metric-reported",
+    "manual-revenue-recovery",
+    "onboarding-kyb-hiring",
+    "open-enrollment-window",
+    "platform-migration",
+    "pe-acquisition-funding",
+  ],
+  apolloCompanyFilters: {
+    q_organization_keyword_tags: [
+      "payments",
+      "payment processing",
+      "merchant acquiring",
+      "neobank",
+      "spend management",
+      "benefits administration",
+      "retirement",
+      "lending",
+      "remittance",
+      "fintech",
+    ],
+    organization_num_employees_ranges: [
+      "51,200",
+      "201,500",
+      "501,1000",
+      "1001,5000",
+      "5001,10000",
+    ],
+    q_organization_job_titles: [
+      "Head of Onboarding",
+      "Head of Implementation",
+      "Head of Merchant Operations",
+      "VP Operations",
+      "Chief Operating Officer",
+    ],
+  },
+  apolloPersonFilters: {
+    person_titles: [
+      "COO",
+      "CRO",
+      "Chief Customer Officer",
+      "Head of Onboarding",
+      "Head of Implementation",
+      "Head of Activation",
+      "VP Operations",
+      "Head of Merchant Operations",
+      "Head of Revenue Operations",
+      "Head of Client Services",
+      "Director of Onboarding",
+      "Director of Implementation",
+    ],
+    person_seniorities: ["manager", "director", "vp", "c_suite"],
+  },
+};
 
 const QA_PRESET: ICPPreset = {
   slug: "qa",
@@ -339,12 +464,14 @@ const PROACTIVE_AGENTS_PRESET: ICPPreset = {
 };
 
 export const PRESETS: Record<string, ICPPreset> = {
+  "revenue-agent": REVENUE_AGENT_PRESET,
   qa: QA_PRESET,
   "customer-intelligence": CUSTOMER_INTELLIGENCE_PRESET,
   "proactive-agents": PROACTIVE_AGENTS_PRESET,
 };
 
 export const PRESET_LIST: ICPPreset[] = [
+  REVENUE_AGENT_PRESET,
   QA_PRESET,
   CUSTOMER_INTELLIGENCE_PRESET,
   PROACTIVE_AGENTS_PRESET,

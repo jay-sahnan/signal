@@ -64,3 +64,7 @@ yarn.lock
 
 # scripts scratch state
 /scripts/.*-progress.json
+
+# Vercel env files (contain secrets)
+.env.vercel
+.env.vercel.*

@@ -23,6 +23,14 @@ import { useCampaign } from "@/lib/campaign-context";
 
 const PRESETS = [
   {
+    slug: "revenue-agent",
+    label: "Revenue Agent",
+    description:
+      "Revenue gated behind multi-step onboarding/activation — stalled cases nobody owns",
+    color:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+  },
+  {
     slug: "qa",
     label: "QA",
     description: "Manual QA processes needing AI conversation coverage",
@@ -84,13 +92,13 @@ function ICPPageContent() {
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") || "add";
 
-  const [selectedPreset, setSelectedPreset] = useState<string>("qa");
+  const [selectedPreset, setSelectedPreset] = useState<string>("revenue-agent");
   const [companyName, setCompanyName] = useState("");
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState<AddedCompany[]>([]);
 
   // ICP definition state
-  const [defPreset, setDefPreset] = useState<string>("qa");
+  const [defPreset, setDefPreset] = useState<string>("revenue-agent");
   const [defContent, setDefContent] = useState("");
   const [defLoading, setDefLoading] = useState(false);
   const [defSaving, setDefSaving] = useState(false);

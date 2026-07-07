@@ -744,7 +744,7 @@ const SEED_COMPANIES: SeedCompany[] = [
 export interface DiscoveredCompany {
   name: string;
   domain: string;
-  source: "seed" | "exa_problem" | "exa_effort" | "exa_company_site";
+  source: "seed" | "exa_problem" | "exa_effort" | "exa_company_site" | "exa_event";
   evidence: string;
 }
 
@@ -919,6 +919,13 @@ export async function discoverCompanies(
   preset: string,
   targetCount = 25,
 ): Promise<DiscoveredCompany[]> {
+  // Revenue Agent uses event-first discovery (find who just triggered a signal)
+  // rather than the descriptive company-site search used by the QA/CX presets.
+  if (preset === "revenue-agent") {
+    const { discoverRevenueAgentCompanies } = await import("./signal-discovery");
+    return discoverRevenueAgentCompanies(targetCount);
+  }
+
   const allCompanies: DiscoveredCompany[] = [];
   const seenDomains = new Set<string>();
 

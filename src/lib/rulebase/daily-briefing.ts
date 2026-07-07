@@ -6,6 +6,11 @@
  * Each CSV has 30+ enriched companies with fresh signal data.
  */
 
+import {
+  generateRevenueAgentBriefing,
+  type RaCompany,
+} from "./revenue-agent-signals";
+
 const EXA_API_KEY = process.env.EXA_API_KEY;
 const EXA_BASE = "https://api.exa.ai/search";
 
@@ -65,6 +70,38 @@ interface SignalQuery {
 }
 
 const SIGNAL_QUERIES: Record<string, SignalQuery[]> = {
+  "revenue-agent": [
+    {
+      label: "M&A / re-onboarding",
+      query:
+        '"{company}" acquired OR acquisition OR "book of business" OR "migrating accounts" OR re-onboard OR "absorbed accounts"',
+      daysBack: 180,
+    },
+    {
+      label: "Onboarding/KYB hiring",
+      query:
+        '"{company}" hiring "Onboarding Specialist" OR "Implementation Manager" OR "KYB Analyst" OR "Merchant Underwriting" OR "Activation Analyst"',
+      daysBack: 30,
+    },
+    {
+      label: "New market/license",
+      query:
+        '"{company}" license OR "new market" OR "expands to" OR "goes live in" payments OR banking OR remittance',
+      daysBack: 180,
+    },
+    {
+      label: "Revenue-ops leader",
+      query:
+        '"{company}" hired OR appointed COO OR CRO OR "Chief Revenue Officer" OR "Head of Onboarding" OR "Head of Implementation"',
+      daysBack: 90,
+    },
+    {
+      label: "Manual revenue recovery",
+      query:
+        '"{company}" reactivation OR "dormant accounts" OR "stalled onboarding" OR "recovered revenue" OR "reactivated merchants"',
+      daysBack: 180,
+    },
+  ],
   qa: [
     {
       label: "CX/Ops hiring",
@@ -182,7 +219,11 @@ async function enrichWithFreshSignals(
 
     // Boost score based on signals
     let adjustedScore = company.score ?? 7;
-    if (signals.some((s) => s.label === "Regulatory"))
+    if (
+      signals.some(
+        (s) => s.label === "Regulatory" || s.label === "M&A / re-onboarding",
+      )
+    )
       adjustedScore = Math.max(adjustedScore, 10);
     else if (
       signals.some(
@@ -255,6 +296,7 @@ function recommendAction(
 // ── Main ─────────────────────────────────────────────────────────────
 
 const PRESET_LABELS: Record<string, string> = {
+  "revenue-agent": "Revenue Agent",
   qa: "QA",
   "customer-intelligence": "Customer Intelligence",
   "proactive-agents": "Proactive Agents",
@@ -273,6 +315,38 @@ export async function generateAndPostBriefing(): Promise<{
     throw new Error("Missing env vars");
   }
 
+  // Revenue Agent (primary motion) — dedicated Block Kit brief via the playbook 0–10 scorer.
+  try {
+    const raIds = await getCampaignIds(supabaseUrl, serviceRoleKey, "revenue-agent");
+    if (raIds) {
+      // Fresh-first: newest-discovered companies lead the brief, so the list
+      // churns as event-discovery adds new names (rather than repeating a static
+      // top-N by score). Each is re-scored live below.
+      const raRes = await fetch(
+        `${supabaseUrl}/rest/v1/campaign_organizations?select=relevance_score,created_at,organization:organizations!inner(name,domain,industry,location,enrichment_data)&campaign_id=in.(${raIds})&order=created_at.desc&limit=40`,
+        { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
+      );
+      const raOrgs = (await raRes.json()) as Array<Record<string, unknown>>;
+      if (Array.isArray(raOrgs) && raOrgs.length > 0) {
+        const raCompanies: RaCompany[] = raOrgs.map((o) => {
+          const org = o.organization as Record<string, unknown>;
+          const apollo = ((org.enrichment_data as Record<string, unknown>)?.apollo ?? {}) as Record<string, unknown>;
+          return {
+            name: org.name as string,
+            domain: (org.domain as string) ?? null,
+            segment: (apollo.industry as string) ?? (org.industry as string) ?? null,
+            employees: (apollo.headcount as number) ?? null,
+            firstSeen: (o.created_at as string) ?? null,
+          };
+        });
+        await generateRevenueAgentBriefing(raCompanies, webhookUrl);
+      }
+    }
+  } catch (e) {
+    console.error("Revenue Agent briefing failed:", e instanceof Error ? e.message : e);
+  }
+
+  // Legacy QA/CX presets — combined text summary briefing.
   const presets = ["qa", "customer-intelligence", "proactive-agents"];
   const icpSummaries: Array<{
     preset: string;
