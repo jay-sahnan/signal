@@ -97,11 +97,15 @@ export const SIGNALS: SignalDef[] = [
     daysBack: 180,
     requireEntity: false,
     query:
-      '"{c}" "launches in" OR "expands to" OR "goes live in" OR "granted license" OR "payments license" OR "new corridor" OR "money transmitter license" OR "secures license" 2025 OR 2026',
+      '"{c}" "launches in" OR "expands to" OR "goes live in" OR "granted license" OR "payments license" OR "e-money licence" OR "EMI licence" OR "FCA authorisation" OR "money transmitter license" OR "Bank of Lithuania" OR "BaFin" OR "Central Bank of Ireland" OR "secures license" OR "new corridor" 2025 OR 2026',
     kw: [
       "launches in", "expands to", "goes live in", "granted licen",
       "payments licen", "banking licen", "money transmitter", "new corridor",
       "secures licen", "new market", "new country",
+      // Europe
+      "e-money licen", "emi licen", "e-money authorisation", "fca authoris", "fca authoriz",
+      "bank of lithuania", "bafin", "acpr", "central bank of ireland", "de nederlandsche bank",
+      "passporting", "eu passport", "lithuania emi",
     ],
     neg: [],
   },
@@ -280,7 +284,8 @@ function slugCandidates(company: RaCompany): string[] {
   const alnum = base.replace(/[^a-z0-9]+/g, "");
   const hyphen = base.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const domainRoot = (company.domain ?? "").replace(/^www\./, "").split(".")[0];
-  return [...new Set([alnum, hyphen, domainRoot].filter((s) => s && s.length > 1))];
+  const raw = company.name.replace(/[^A-Za-z0-9]/g, ""); // preserves case — SmartRecruiters IDs are often PascalCase
+  return [...new Set([alnum, hyphen, domainRoot, raw].filter((s) => s && s.length > 1))];
 }
 
 const ROLE_RE = /onboard|implementation|\bkyb\b|\bkyc\b|merchant (onboarding|underwriting|operations)|activation|verification specialist|client onboarding|deployment|conversion/i;
@@ -302,6 +307,11 @@ async function atsJobs(company: RaCompany): Promise<FiredSignal | null> {
       | { jobs?: Array<{ title?: string }> } | null;
     const ahRoles = (ah?.jobs ?? []).filter((j) => ROLE_RE.test(j.title ?? ""));
     if (ahRoles.length) return { key: "hiring", label: "Onboarding/KYB hiring", evidence: `${ahRoles.length} open role(s) incl. "${ahRoles[0].title}" (Ashby)`, entity: null, url: `https://jobs.ashbyhq.com/${slug}` };
+    // SmartRecruiters (widely used across Europe) — public postings API, no key
+    const sr = (await fetchJSON(`https://api.smartrecruiters.com/v1/companies/${slug}/postings?limit=100`)) as
+      | { content?: Array<{ name?: string }> } | null;
+    const srRoles = (sr?.content ?? []).filter((j) => ROLE_RE.test(j.name ?? ""));
+    if (srRoles.length) return { key: "hiring", label: "Onboarding/KYB hiring", evidence: `${srRoles.length} open role(s) incl. "${srRoles[0].name}" (SmartRecruiters)`, entity: null, url: `https://jobs.smartrecruiters.com/${slug}` };
   }
   return null;
 }

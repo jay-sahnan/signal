@@ -34,7 +34,13 @@ const EVENT_QUERIES: EventQuery[] = [
     signalType: "New market / license",
     daysBack: 30,
     query:
-      'fintech OR payments OR remittance OR neobank ("granted license" OR "payments license" OR "banking license" OR "launches in" OR "expands to" OR "money transmitter" OR "new corridor") 2026',
+      'fintech OR payments OR remittance OR neobank ("granted license" OR "payments license" OR "banking license" OR "e-money licence" OR "EMI licence" OR "FCA authorisation" OR "Bank of Lithuania" OR "BaFin" OR "Central Bank of Ireland" OR "launches in" OR "expands to" OR "money transmitter" OR "new corridor" OR "EU passport") 2026',
+  },
+  {
+    signalType: "New market / license",
+    daysBack: 30,
+    query:
+      'European fintech OR "UK fintech" OR EMI OR "payment institution" (authorised OR authorized OR "granted licence" OR "launches" OR "expands into") (UK OR Europe OR Germany OR France OR Ireland OR Lithuania OR Netherlands) 2026',
   },
   {
     signalType: "Onboarding / KYB hiring",
