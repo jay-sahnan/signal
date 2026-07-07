@@ -131,7 +131,7 @@ export async function discoverRevenueAgentCompanies(
     let extracted;
     try {
       const res = await generateObject({
-        model: anthropic("claude-sonnet-4-20250514"),
+        model: anthropic("claude-haiku-4-5-20251001"),
         schema: ExtractSchema,
         prompt: `These are web results about a "${eq.signalType}" event in fintech. For each DISTINCT fintech OPERATOR that is the SUBJECT of one of these events, return a row.
 
