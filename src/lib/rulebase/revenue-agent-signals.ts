@@ -257,6 +257,81 @@ function headline(f: FiredSignal): string {
   }
 }
 
+// ── FREE, credit-free enrichers (ATS boards + CFPB) ───────────────────
+// These consume NO Apollo credits and no paid APIs. They strengthen the
+// hiring + complaints signals (which Exa is weak at) from public endpoints.
+
+async function fetchJSON(url: string, timeoutMs = 8000): Promise<unknown | null> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: ctl.signal, headers: { "user-agent": "rulebase-signal/1.0" } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function slugCandidates(company: RaCompany): string[] {
+  const base = company.name.toLowerCase().replace(/\b(inc|ltd|llc|group|technologies|financial|the)\b/g, "").trim();
+  const alnum = base.replace(/[^a-z0-9]+/g, "");
+  const hyphen = base.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const domainRoot = (company.domain ?? "").replace(/^www\./, "").split(".")[0];
+  return [...new Set([alnum, hyphen, domainRoot].filter((s) => s && s.length > 1))];
+}
+
+const ROLE_RE = /onboard|implementation|\bkyb\b|\bkyc\b|merchant (onboarding|underwriting|operations)|activation|verification specialist|client onboarding|deployment|conversion/i;
+
+/** Check Greenhouse / Lever / Ashby public boards for onboarding/implementation roles. Free. */
+async function atsJobs(company: RaCompany): Promise<FiredSignal | null> {
+  for (const slug of slugCandidates(company)) {
+    // Greenhouse
+    const gh = (await fetchJSON(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=false`)) as
+      | { jobs?: Array<{ title?: string }> } | null;
+    const ghRoles = (gh?.jobs ?? []).filter((j) => ROLE_RE.test(j.title ?? ""));
+    if (ghRoles.length) return { key: "hiring", label: "Onboarding/KYB hiring", evidence: `${ghRoles.length} open role(s) incl. "${ghRoles[0].title}" (Greenhouse)`, entity: null, url: `https://boards.greenhouse.io/${slug}` };
+    // Lever
+    const lv = (await fetchJSON(`https://api.lever.co/v0/postings/${slug}?mode=json`)) as Array<{ text?: string }> | null;
+    const lvRoles = (Array.isArray(lv) ? lv : []).filter((j) => ROLE_RE.test(j.text ?? ""));
+    if (lvRoles.length) return { key: "hiring", label: "Onboarding/KYB hiring", evidence: `${lvRoles.length} open role(s) incl. "${lvRoles[0].text}" (Lever)`, entity: null, url: `https://jobs.lever.co/${slug}` };
+    // Ashby
+    const ah = (await fetchJSON(`https://api.ashbyhq.com/posting-api/job-board/${slug}`)) as
+      | { jobs?: Array<{ title?: string }> } | null;
+    const ahRoles = (ah?.jobs ?? []).filter((j) => ROLE_RE.test(j.title ?? ""));
+    if (ahRoles.length) return { key: "hiring", label: "Onboarding/KYB hiring", evidence: `${ahRoles.length} open role(s) incl. "${ahRoles[0].title}" (Ashby)`, entity: null, url: `https://jobs.ashbyhq.com/${slug}` };
+  }
+  return null;
+}
+
+// Only account-opening / verification issues count as the Revenue Agent signal —
+// NOT generic "managing an account" or credit-report noise (which also avoids
+// common-word over-matching, e.g. "Current" pulling credit-report complaints).
+const CFPB_ONBOARDING_ISSUE = /opening an account|account opening|identity|verification|unable to open|fraud or scam/i;
+
+/** Query the free CFPB complaint API, counting only account-opening/verification issues. */
+async function cfpbComplaints(company: RaCompany, minCount = 5): Promise<FiredSignal | null> {
+  const since = new Date(Date.now() - 365 * 86400000).toISOString().split("T")[0];
+  const url = `https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?search_term=${encodeURIComponent(company.name)}&date_received_min=${since}&size=0`;
+  const data = (await fetchJSON(url, 10000)) as
+    | { aggregations?: { issue?: { issue?: { buckets?: Array<{ key: string; doc_count: number }> } } } }
+    | null;
+  const buckets = data?.aggregations?.issue?.issue?.buckets ?? [];
+  const relevant = buckets.filter((b) => CFPB_ONBOARDING_ISSUE.test(b.key));
+  const count = relevant.reduce((s, b) => s + (b.doc_count ?? 0), 0);
+  if (count < minCount) return null;
+  const top = relevant.sort((a, b) => b.doc_count - a.doc_count)[0];
+  return {
+    key: "complaints",
+    label: "Verification/activation complaints",
+    evidence: `${count} CFPB complaints re: account opening/verification (12mo; top: "${top?.key}")`,
+    entity: null,
+    url: `https://www.consumerfinance.gov/data-research/consumer-complaints/search/?searchText=${encodeURIComponent(company.name)}`,
+  };
+}
+
 export async function scoreCompany(company: RaCompany): Promise<ScoredCompany> {
   const fired: FiredSignal[] = [];
   let score = 0;
@@ -264,7 +339,20 @@ export async function scoreCompany(company: RaCompany): Promise<ScoredCompany> {
     const hit = await detect(s, company);
     if (hit) { score += s.boost; fired.push(hit); }
   }
-  fired.sort((a, b) => (SIGNALS.find((s) => s.key === b.key)!.boost) - (SIGNALS.find((s) => s.key === a.key)!.boost));
+
+  // Free enrichers: add the signal if Exa missed it, else upgrade its evidence.
+  // No double-counting of the boost.
+  const [ats, cfpb] = await Promise.all([atsJobs(company), cfpbComplaints(company)]);
+  const merge = (hit: FiredSignal | null, boost: number) => {
+    if (!hit) return;
+    const existing = fired.find((f) => f.key === hit.key);
+    if (existing) { existing.evidence = hit.evidence; existing.url = hit.url ?? existing.url; }
+    else { score += boost; fired.push(hit); }
+  };
+  merge(ats, 2);
+  merge(cfpb, 2);
+
+  fired.sort((a, b) => (SIGNALS.find((s) => s.key === b.key)?.boost ?? 2) - (SIGNALS.find((s) => s.key === a.key)?.boost ?? 2));
   score = Math.max(0, Math.min(10, score));
   return { ...company, score, band: band(score), signals: fired, headline: fired[0] ? headline(fired[0]) : "" };
 }
