@@ -6,6 +6,11 @@
  * Each CSV has 30+ enriched companies with fresh signal data.
  */
 
+import {
+  generateRevenueAgentBriefing,
+  type RaCompany,
+} from "./revenue-agent-signals";
+
 const EXA_API_KEY = process.env.EXA_API_KEY;
 const EXA_BASE = "https://api.exa.ai/search";
 
@@ -310,12 +315,35 @@ export async function generateAndPostBriefing(): Promise<{
     throw new Error("Missing env vars");
   }
 
-  const presets = [
-    "revenue-agent",
-    "qa",
-    "customer-intelligence",
-    "proactive-agents",
-  ];
+  // Revenue Agent (primary motion) — dedicated Block Kit brief via the playbook 0–10 scorer.
+  try {
+    const raIds = await getCampaignIds(supabaseUrl, serviceRoleKey, "revenue-agent");
+    if (raIds) {
+      const raRes = await fetch(
+        `${supabaseUrl}/rest/v1/campaign_organizations?select=relevance_score,organization:organizations!inner(name,domain,industry,location,enrichment_data)&campaign_id=in.(${raIds})&order=relevance_score.desc.nullsfirst&limit=40`,
+        { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
+      );
+      const raOrgs = (await raRes.json()) as Array<Record<string, unknown>>;
+      if (Array.isArray(raOrgs) && raOrgs.length > 0) {
+        const raCompanies: RaCompany[] = raOrgs.map((o) => {
+          const org = o.organization as Record<string, unknown>;
+          const apollo = ((org.enrichment_data as Record<string, unknown>)?.apollo ?? {}) as Record<string, unknown>;
+          return {
+            name: org.name as string,
+            domain: (org.domain as string) ?? null,
+            segment: (apollo.industry as string) ?? (org.industry as string) ?? null,
+            employees: (apollo.headcount as number) ?? null,
+          };
+        });
+        await generateRevenueAgentBriefing(raCompanies, webhookUrl);
+      }
+    }
+  } catch (e) {
+    console.error("Revenue Agent briefing failed:", e instanceof Error ? e.message : e);
+  }
+
+  // Legacy QA/CX presets — combined text summary briefing.
+  const presets = ["qa", "customer-intelligence", "proactive-agents"];
   const icpSummaries: Array<{
     preset: string;
     label: string;
