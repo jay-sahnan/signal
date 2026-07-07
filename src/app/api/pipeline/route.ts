@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   }
 
   const supabase = getAdminClient();
-  const presets = ["qa", "customer-intelligence", "proactive-agents"];
+  const presets = ["revenue-agent", "qa", "customer-intelligence", "proactive-agents"];
   const results: Array<{
     preset: string;
     discovered: number;
