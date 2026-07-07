@@ -24,6 +24,7 @@ export interface RaCompany {
   employees?: string | number | null;
   metric?: string;
   disambig?: string[];
+  firstSeen?: string | null; // when the company was discovered (ISO); used to flag 🆕
 }
 
 export interface FiredSignal {
@@ -289,16 +290,19 @@ export function buildBlocks(scored: ScoredCompany[], dateStr: string): unknown[]
   const overlap = rows.filter((c) => c.signals.length >= 2);
   const complaints = rows.filter((c) => c.signals.some((s) => s.key === "complaints"));
   const sigList = (c: ScoredCompany) => c.signals.map((s) => `${SIGEMOJI[s.key] ?? "•"} ${s.label}`).join(" · ");
+  const isNew = (c: ScoredCompany) =>
+    c.firstSeen ? Date.now() - new Date(c.firstSeen).getTime() < 2 * 86400000 : false;
+  const newCount = rows.filter(isNew).length;
 
   const blocks: unknown[] = [
     { type: "header", text: { type: "plain_text", text: "🟢 Revenue Agent — Signal Brief", emoji: true } },
     { type: "context", elements: [{ type: "mrkdwn", text: `*${dateStr}* · ${rows.length} companies scored (0–10 playbook)` }] },
-    { type: "section", text: { type: "mrkdwn", text: `🔴 *${fast.length}* Fast-track · 🟠 *${strong.length}* Strong · 🟡 *${watch.length}* Watchlist · ⚪ *${low.length}* Low\n*${overlap.length}* with 2+ overlapping signals · *${complaints.length}* show verification/activation complaints. _M&A counts only as a book-of-business transfer, not a tech tuck-in._` } },
+    { type: "section", text: { type: "mrkdwn", text: `🆕 *${newCount}* newly discovered this window · 🔴 *${fast.length}* Fast-track · 🟠 *${strong.length}* Strong · 🟡 *${watch.length}* Watchlist · ⚪ *${low.length}* Low\n*${overlap.length}* with 2+ overlapping signals · *${complaints.length}* show verification/activation complaints. _M&A counts only as a book-of-business transfer, not a tech tuck-in._` } },
     { type: "divider" },
   ];
   for (const c of fast.slice(0, 12)) {
     const others = c.signals.slice(1).map((s) => s.label).join(" · ");
-    let t = `${tierEmoji(c.score)} *${c.score}/10 · ${c.name}*  _${c.segment ?? ""}${c.employees ? ` · ${c.employees} emp` : ""}${c.signals.length >= 2 ? " · 2+ signals" : ""}_\n→ ${c.headline}\n`;
+    let t = `${tierEmoji(c.score)} *${c.score}/10 · ${c.name}*${isNew(c) ? " 🆕" : ""}  _${c.segment ?? ""}${c.employees ? ` · ${c.employees} emp` : ""}${c.signals.length >= 2 ? " · 2+ signals" : ""}_\n→ ${c.headline}\n`;
     if (others) t += `_Also: ${others}_\n`;
     t += `▸ ${buyerFor(c.segment)} · 💵 anchor on ${c.metric ?? "recovered revenue"}`;
     const url = c.signals.find((s) => s.url)?.url;

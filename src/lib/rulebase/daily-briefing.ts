@@ -319,8 +319,11 @@ export async function generateAndPostBriefing(): Promise<{
   try {
     const raIds = await getCampaignIds(supabaseUrl, serviceRoleKey, "revenue-agent");
     if (raIds) {
+      // Fresh-first: newest-discovered companies lead the brief, so the list
+      // churns as event-discovery adds new names (rather than repeating a static
+      // top-N by score). Each is re-scored live below.
       const raRes = await fetch(
-        `${supabaseUrl}/rest/v1/campaign_organizations?select=relevance_score,organization:organizations!inner(name,domain,industry,location,enrichment_data)&campaign_id=in.(${raIds})&order=relevance_score.desc.nullsfirst&limit=40`,
+        `${supabaseUrl}/rest/v1/campaign_organizations?select=relevance_score,created_at,organization:organizations!inner(name,domain,industry,location,enrichment_data)&campaign_id=in.(${raIds})&order=created_at.desc&limit=40`,
         { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
       );
       const raOrgs = (await raRes.json()) as Array<Record<string, unknown>>;
@@ -333,6 +336,7 @@ export async function generateAndPostBriefing(): Promise<{
             domain: (org.domain as string) ?? null,
             segment: (apollo.industry as string) ?? (org.industry as string) ?? null,
             employees: (apollo.headcount as number) ?? null,
+            firstSeen: (o.created_at as string) ?? null,
           };
         });
         await generateRevenueAgentBriefing(raCompanies, webhookUrl);
