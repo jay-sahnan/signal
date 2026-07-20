@@ -5,7 +5,6 @@ import {
   scoreCompany,
   classifyICP,
 } from "@/lib/rulebase/pipeline";
-import { generateAndPostBriefing } from "@/lib/rulebase/daily-briefing";
 
 /**
  * POST /api/pipeline
@@ -16,7 +15,7 @@ import { generateAndPostBriefing } from "@/lib/rulebase/daily-briefing";
  * 3. Run signals against each
  * 4. Score and classify
  * 5. Generate outreach
- * 6. Post Slack briefing with CSV links
+ * 6. (Slack briefing removed — daily signal post retired)
  *
  * Can be triggered by cron (vercel.json) or manually.
  */
@@ -31,7 +30,12 @@ export async function POST(request: Request) {
   }
 
   const supabase = getAdminClient();
-  const presets = ["revenue-agent", "qa", "customer-intelligence", "proactive-agents"];
+  const presets = [
+    "revenue-agent",
+    "qa",
+    "customer-intelligence",
+    "proactive-agents",
+  ];
   const results: Array<{
     preset: string;
     discovered: number;
@@ -213,18 +217,9 @@ export async function POST(request: Request) {
     });
   }
 
-  // Step 7: Post Slack briefing
-  let briefingResult = null;
-  try {
-    briefingResult = await generateAndPostBriefing();
-  } catch (err) {
-    console.error("[pipeline] Slack briefing failed:", err);
-  }
-
   return Response.json({
     success: true,
     pipeline: results,
-    briefing: briefingResult,
     totalDiscovered: results.reduce((s, r) => s + r.discovered, 0),
     totalNew: results.reduce((s, r) => s + r.newInserted, 0),
     totalScored: results.reduce((s, r) => s + r.scored, 0),
