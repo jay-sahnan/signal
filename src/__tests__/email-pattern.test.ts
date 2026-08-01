@@ -31,6 +31,7 @@ interface PersonRow {
   work_email_source: EmailSource | null;
   work_email_confidence: number | null;
   work_email_verified_at: string | null;
+  work_email_verification: string | null;
 }
 interface OrgRow {
   id: string;
@@ -56,6 +57,7 @@ function createFakeSupabase(initial: {
       work_email_source: null,
       work_email_confidence: null,
       work_email_verified_at: null,
+      work_email_verification: null,
       ...p,
     })) as PersonRow[],
     organizations: (initial.organizations ?? []).map((o) => ({
@@ -444,6 +446,64 @@ describe("recordVerifiedEmail", () => {
     });
     expect(tables.people[0].work_email_source).toBe("user_entered");
     expect(tables.people[0].work_email_confidence).toBeCloseTo(1.0);
+  });
+
+  it("does NOT let csv_import displace an existing deliverable address", async () => {
+    // A CSV upload is often AI-generated or a stale export. The address a
+    // provider found — and a verifier has since proven deliverable — must
+    // survive a re-import carrying a different (possibly hallucinated) one.
+    // csv_import (0.5) sits below provider_found (0.75) and team_page (0.7),
+    // so the different-email write is refused and the verdict stays intact.
+    const { client, tables } = createFakeSupabase({
+      people: [
+        {
+          id: "p1",
+          name: "Jane Doe",
+          organization_id: "o1",
+          work_email: "jane@acme.com",
+          work_email_source: "provider_found",
+          work_email_confidence: 0.75,
+          work_email_verification: "deliverable",
+        },
+      ],
+      organizations: [{ id: "o1" }],
+    });
+    await recordVerifiedEmail(client, {
+      personId: "p1",
+      email: "jane.doe@acme.com",
+      source: "csv_import",
+    });
+    expect(tables.people[0].work_email).toBe("jane@acme.com");
+    expect(tables.people[0].work_email_source).toBe("provider_found");
+    expect(tables.people[0].work_email_verification).toBe("deliverable");
+  });
+
+  it("writes a csv_import address over a bare exa_search suggestion", async () => {
+    // Below the verified-ish sources but above a string Exa found near a
+    // name: an upload is still an answer about this specific person.
+    const { client, tables } = createFakeSupabase({
+      people: [
+        {
+          id: "p1",
+          name: "Jane Doe",
+          organization_id: "o1",
+          work_email: "j.doe@acme.com",
+          work_email_source: "exa_search",
+          work_email_confidence: 0.3,
+        },
+      ],
+      organizations: [{ id: "o1" }],
+    });
+    await recordVerifiedEmail(client, {
+      personId: "p1",
+      email: "jane.doe@acme.com",
+      source: "csv_import",
+    });
+    expect(tables.people[0].work_email).toBe("jane.doe@acme.com");
+    expect(tables.people[0].work_email_source).toBe("csv_import");
+    // The new address carries no verdict — the send gate's just-in-time
+    // verifier still has to prove it before anything leaves.
+    expect(tables.people[0].work_email_verification).toBeNull();
   });
 
   it("keeps the stronger source on a same-email refresh with weaker source", async () => {

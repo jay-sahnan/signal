@@ -22,6 +22,7 @@ export type AffiliationSource =
   | "email_domain"
   | "team_page"
   | "linkedin_profile"
+  | "csv_import"
   | "llm_verified"
   | "search_stamp";
 
@@ -37,6 +38,16 @@ export const AFFILIATION_WEIGHT: Record<AffiliationSource, number> = {
   email_domain: 0.95,
   /** Listed on the company's own website. They published it about themselves. */
   team_page: 0.9,
+  /**
+   * The user's uploaded target list places them at this company. Deliberately
+   * NOT ranked as a human assertion: uploads are routinely AI-generated
+   * prospect lists or stale exports from another tool, so the claim is
+   * secondhand at best. Above the send threshold — an imported contact is
+   * actionable as-is — but below email_domain, so Signal's own verification
+   * can correct a bad upload, and below user_entered, so it never triggers
+   * the human-override move.
+   */
+  csv_import: 0.85,
   /** Their LinkedIn profile names this employer. */
   linkedin_profile: 0.8,
   /** An LLM read the evidence and judged them an employee. */

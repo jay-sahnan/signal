@@ -11,166 +11,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { apiFetch } from "@/lib/api-fetch";
+import { COLUMN_MAP, mapColumns, parseCSV } from "@/lib/csv/company-csv";
 import { MAX_ROWS_PER_REQUEST } from "@/lib/import-limits";
-
-interface ParsedCompany {
-  name: string;
-  domain: string | null;
-  url: string | null;
-  industry: string | null;
-  location: string | null;
-  description: string | null;
-}
+import type { TargetAccountRow } from "@/lib/types/target-list";
 
 interface CsvUploadProps {
   campaignId: string;
   onImported: () => void;
 }
 
-// Column name aliases for auto-mapping
-const COLUMN_MAP: Record<string, keyof ParsedCompany> = {
-  name: "name",
-  company: "name",
-  company_name: "name",
-  "company name": "name",
-  organization: "name",
-  domain: "domain",
-  website: "domain",
-  "website url": "domain",
-  site: "domain",
-  url: "url",
-  link: "url",
-  industry: "industry",
-  sector: "industry",
-  vertical: "industry",
-  location: "location",
-  city: "location",
-  country: "location",
-  hq: "location",
-  headquarters: "location",
-  region: "location",
-  geography: "location",
-  description: "description",
-  about: "description",
-  summary: "description",
-  overview: "description",
-};
-
-function parseCSV(text: string): { headers: string[]; rows: string[][] } {
-  const lines: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (ch === '"') {
-      if (inQuotes && text[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (
-      (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) &&
-      !inQuotes
-    ) {
-      lines.push(current);
-      current = "";
-      if (ch === "\r") i++;
-    } else {
-      current += ch;
-    }
-  }
-  if (current.trim()) lines.push(current);
-
-  if (lines.length === 0) return { headers: [], rows: [] };
-
-  const splitRow = (line: string): string[] => {
-    const cells: string[] = [];
-    let cell = "";
-    let q = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (q && line[i + 1] === '"') {
-          cell += '"';
-          i++;
-        } else {
-          q = !q;
-        }
-      } else if (ch === "," && !q) {
-        cells.push(cell.trim());
-        cell = "";
-      } else {
-        cell += ch;
-      }
-    }
-    cells.push(cell.trim());
-    return cells;
-  };
-
-  const headers = splitRow(lines[0]);
-  const rows = lines
-    .slice(1)
-    .map(splitRow)
-    .filter((r) => r.some((c) => c));
-
-  return { headers, rows };
-}
-
-function mapColumns(headers: string[], rows: string[][]): ParsedCompany[] {
-  // Map header index to field
-  const mapping: Array<keyof ParsedCompany | null> = headers.map((h) => {
-    const normalized = h.toLowerCase().trim();
-    return COLUMN_MAP[normalized] ?? null;
-  });
-
-  // If no "name" column was found, try the first column
-  if (!mapping.includes("name") && headers.length > 0) {
-    mapping[0] = "name";
-  }
-
-  return rows.map((row) => {
-    const company: ParsedCompany = {
-      name: "",
-      domain: null,
-      url: null,
-      industry: null,
-      location: null,
-      description: null,
-    };
-
-    for (let i = 0; i < row.length; i++) {
-      const field = mapping[i];
-      if (field && row[i]) {
-        if (field === "name") {
-          company.name = row[i];
-        } else {
-          company[field] = row[i];
-        }
-      }
-    }
-
-    // If url is set but domain isn't, try extracting domain
-    if (!company.domain && company.url) {
-      try {
-        company.domain = new URL(
-          company.url.startsWith("http")
-            ? company.url
-            : `https://${company.url}`,
-        ).hostname.replace("www.", "");
-      } catch {
-        // skip
-      }
-    }
-
-    return company;
-  });
-}
-
 export function CsvUpload({ campaignId, onImported }: CsvUploadProps) {
   const [open, setOpen] = useState(false);
-  const [companies, setCompanies] = useState<ParsedCompany[]>([]);
+  const [companies, setCompanies] = useState<TargetAccountRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  AFFILIATION_SEND_THRESHOLD,
   AFFILIATION_WEIGHT,
   normalizeCompanyName,
   parseLinkedInEmployer,
@@ -183,6 +184,74 @@ describe("recordAffiliation", () => {
     });
 
     expect(people[0].organization_id).toBe("org-a");
+  });
+
+  it("does not let a csv upload move a contact away from a verified employer", async () => {
+    // Machine verification outranks an upload. email_domain (0.95) was earned
+    // by a deliverable mailbox at the employer's own domain; a CSV row is
+    // routinely an AI-generated prospect list or a stale export, so it must
+    // not be able to reassign the contact.
+    seed({
+      organization_id: "org-a",
+      affiliation_source: "email_domain",
+      affiliation_confidence: AFFILIATION_WEIGHT.email_domain,
+    });
+
+    await recordAffiliation(client(), {
+      personId: "p1",
+      organizationId: "org-b",
+      source: "csv_import",
+      evidence: "the user's uploaded target list places them at org-b",
+    });
+
+    expect(people[0].organization_id).toBe("org-a");
+    expect(people[0].affiliation_source).toBe("email_domain");
+  });
+
+  it("does not grant csv_import the human-override move user_entered has", async () => {
+    // Only user_entered bypasses the strictly-stronger rule. An upload is not
+    // a human assertion — if csv_import triggered the override, re-importing
+    // a stale list would silently undo hand-made corrections.
+    seed({
+      organization_id: "org-a",
+      affiliation_source: "user_entered",
+      affiliation_confidence: AFFILIATION_WEIGHT.user_entered,
+    });
+
+    await recordAffiliation(client(), {
+      personId: "p1",
+      organizationId: "org-b",
+      source: "csv_import",
+      evidence: "the user's uploaded target list places them at org-b",
+    });
+
+    expect(people[0].organization_id).toBe("org-a");
+    expect(people[0].affiliation_source).toBe("user_entered");
+  });
+
+  it("puts an imported contact above the send threshold", async () => {
+    // The point of ranking csv_import at 0.85 rather than treating it as
+    // noise: an imported contact is immediately draftable.
+    await recordAffiliation(client(), {
+      personId: "p1",
+      organizationId: "org-a",
+      source: "csv_import",
+      evidence: "the user's uploaded target list places them at org-a",
+    });
+
+    expect(people[0].affiliation_confidence).toBe(
+      AFFILIATION_WEIGHT.csv_import,
+    );
+    expect(AFFILIATION_WEIGHT.csv_import).toBeGreaterThanOrEqual(
+      AFFILIATION_SEND_THRESHOLD,
+    );
+    // And the machine-verification / human ordering that makes it overridable:
+    expect(AFFILIATION_WEIGHT.csv_import).toBeLessThan(
+      AFFILIATION_WEIGHT.email_domain,
+    );
+    expect(AFFILIATION_WEIGHT.csv_import).toBeLessThan(
+      AFFILIATION_WEIGHT.user_entered,
+    );
   });
 
   it("detaches someone when strictly stronger evidence points elsewhere", async () => {

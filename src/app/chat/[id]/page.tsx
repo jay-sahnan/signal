@@ -7,6 +7,7 @@ import { useChat } from "@ai-sdk/react";
 import { SquarePen } from "lucide-react";
 
 import { useAuth } from "@clerk/nextjs";
+import { toast } from "sonner";
 
 import { ChatErrorBanner } from "@/components/chat/chat-error-banner";
 import { ChatInput } from "@/components/chat/chat-input";
@@ -18,6 +19,7 @@ import { useStreaming } from "@/lib/streaming-context";
 import { loadChat, saveChat } from "@/lib/services/chat-history";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/api-fetch";
+import { mapColumns, parseCSV } from "@/lib/csv/company-csv";
 
 // ---------------------------------------------------------------------------
 // Inner component -- only rendered after initial messages are loaded so that
@@ -134,9 +136,95 @@ function ChatView({
     setInput("");
   };
 
-  const onCsvUpload = (content: string, fileName: string) => {
-    const msg = `I'm uploading a CSV file (${fileName}). Please review the data and help me import it into the active campaign.\n\n\`\`\`csv\n${content}\n\`\`\``;
-    sendMessage({ text: msg }, requestOptions);
+  // CSV uploads become a target account list (server-side), not pasted CSV in
+  // the chat context. The agent only receives a one-line receipt with the
+  // list ID and works the list through the target-list tools.
+  const onCsvUpload = async (content: string, fileName: string) => {
+    const { headers, rows } = parseCSV(content);
+    if (headers.length === 0 || rows.length === 0) {
+      toast.error("No rows found in that CSV");
+      return;
+    }
+    const accounts = mapColumns(headers, rows);
+    const listName = fileName.replace(/\.[^./\\]+$/, "").trim() || fileName;
+
+    let listId: string;
+    try {
+      const res = await apiFetch("/api/target-lists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: listName, original_filename: fileName }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        id?: string;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.id) {
+        throw new Error(data?.error ?? "Failed to create the target list");
+      }
+      listId = data.id;
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create the target list",
+      );
+      return;
+    }
+
+    const BATCH_SIZE = 500;
+    const totalBatches = Math.ceil(accounts.length / BATCH_SIZE);
+    const totals = { imported: 0, skipped: 0, failed: 0, peopleImported: 0 };
+    const progressToastId =
+      totalBatches > 1
+        ? toast.loading(`Importing ${accounts.length} rows...`)
+        : undefined;
+
+    for (let i = 0; i < totalBatches; i++) {
+      const batch = accounts.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
+      if (progressToastId !== undefined) {
+        toast.loading(`Importing batch ${i + 1} of ${totalBatches}...`, {
+          id: progressToastId,
+        });
+      }
+      try {
+        const res = await apiFetch(`/api/target-lists/${listId}/accounts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: batch }),
+        });
+        if (!res.ok) throw new Error();
+        const result = (await res.json()) as {
+          imported?: number;
+          skipped?: number;
+          failed?: number;
+          peopleImported?: number;
+        };
+        totals.imported += result.imported ?? 0;
+        totals.skipped += result.skipped ?? 0;
+        totals.failed += result.failed ?? 0;
+        totals.peopleImported += result.peopleImported ?? 0;
+      } catch {
+        totals.failed += batch.length;
+      }
+    }
+
+    if (progressToastId !== undefined) toast.dismiss(progressToastId);
+
+    if (totals.imported === 0 && totals.skipped === 0) {
+      toast.error("Import failed", {
+        description: "No rows could be imported. Check the file and try again.",
+      });
+      return;
+    }
+
+    let text = `I've uploaded a target account list "${fileName}" — ${totals.imported} companies imported (${totals.skipped} duplicates skipped), list ID ${listId}.`;
+    if (totals.peopleImported > 0) {
+      text += ` The file also included ${totals.peopleImported} contacts, now attached to their accounts.`;
+    }
+    if (totals.failed > 0) {
+      text += ` Note: ${totals.failed} rows failed to import.`;
+    }
+    text += " Please help me work this list.";
+    sendMessage({ text }, requestOptions);
   };
 
   const router = useRouter();

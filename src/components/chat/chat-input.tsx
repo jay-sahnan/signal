@@ -4,9 +4,12 @@ import { useEffect, useRef } from "react";
 
 import { ArrowUp, Paperclip, Square } from "lucide-react";
 import posthog from "posthog-js";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+
+const MAX_CSV_SIZE_BYTES = 5 * 1024 * 1024;
 
 interface ChatInputProps {
   input: string;
@@ -66,6 +69,13 @@ export function ChatInput({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !onCsvUpload) return;
+    if (file.size > MAX_CSV_SIZE_BYTES) {
+      toast.error("CSV is too large", {
+        description: "Files up to 5 MB are supported. Split it and try again.",
+      });
+      e.target.value = "";
+      return;
+    }
     posthog.capture("csv_uploaded", {
       file_name: file.name,
       file_size_bytes: file.size,

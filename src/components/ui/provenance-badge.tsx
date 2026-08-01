@@ -149,6 +149,7 @@ const AFFILIATION_LABEL: Record<string, string> = {
   email_domain: "verified email at the company's domain",
   team_page: "listed on the company's own website",
   linkedin_profile: "their LinkedIn profile names this company",
+  csv_import: "your uploaded list places them here",
   llm_verified: "checked against their profile",
   search_stamp: "only appeared in a search for this company",
 };

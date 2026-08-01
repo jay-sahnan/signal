@@ -9,6 +9,7 @@ export type EmailSource =
   | "team_page"
   | "exa_search"
   | "provider_found"
+  | "csv_import"
   | "pattern_derived";
 
 export interface VerifiedEmail {
@@ -29,6 +30,14 @@ export const SOURCE_WEIGHT: Record<EmailSource, number> = {
   // page — and well above exa_search for the same reason.
   provider_found: 0.75,
   team_page: 0.7,
+  // An address the user's uploaded target list carried. Better than a string
+  // Exa found near a name, but below team_page and provider_found: uploads
+  // are often AI-generated or stale exports, so an import must never displace
+  // an address one of those sources established — in particular one a
+  // verifier has since confirmed deliverable (recordVerifiedEmail refuses a
+  // different-address write from a weaker source). Not in the JIT skip list
+  // either, so the send gate still proves the mailbox before anything leaves.
+  csv_import: 0.5,
   exa_search: 0.3,
   // A guess, by construction. Zero weight keeps derived addresses out of the
   // evidence that infers the pattern they came from.

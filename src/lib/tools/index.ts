@@ -72,6 +72,13 @@ import {
   draftEmailsForSequence,
   getSequenceStatus,
 } from "./sequence-tools";
+import {
+  getTargetLists,
+  getTargetList,
+  linkTargetListToCampaign,
+  prioritizeTargetAccounts,
+  enrichTargetAccounts,
+} from "./target-list-tools";
 import { getPostHogClient } from "@/lib/posthog-server";
 
 const rawTools = {
@@ -135,6 +142,11 @@ const rawTools = {
   draftSequenceEmails,
   draftEmailsForSequence,
   getSequenceStatus,
+  getTargetLists,
+  getTargetList,
+  linkTargetListToCampaign,
+  prioritizeTargetAccounts,
+  enrichTargetAccounts,
 };
 
 type ToolCtx = { userId?: string; campaignId?: string | null };

@@ -222,14 +222,17 @@ export async function findContactsForOrganization(
           continue;
         }
 
-        const person = await findOrCreatePerson({
-          name: dp.name,
-          title: dp.title,
-          linkedin_url: linkedinUrl,
-          work_email: dp.email,
-          organization_id: organizationId,
-          source: "website",
-        });
+        const person = await findOrCreatePerson(
+          {
+            name: dp.name,
+            title: dp.title,
+            linkedin_url: linkedinUrl,
+            work_email: dp.email,
+            organization_id: organizationId,
+            source: "website",
+          },
+          supabase,
+        );
 
         const evidence = `listed on ${org.domain}`;
         await recordAffiliation(supabase, {
@@ -247,7 +250,8 @@ export async function findContactsForOrganization(
           });
         }
 
-        if (campaignId) await linkPersonToCampaign(person.id, campaignId);
+        if (campaignId)
+          await linkPersonToCampaign(person.id, campaignId, supabase);
         if (linkedinUrl) existingUrls.add(linkedinUrl);
 
         verifiedCount++;
@@ -378,13 +382,16 @@ export async function findContactsForOrganization(
       const source: AffiliationSource =
         judged.verdict === "verified" ? "llm_verified" : "search_stamp";
 
-      const person = await findOrCreatePerson({
-        name: judged.name,
-        title: judged.title,
-        linkedin_url: candidate.linkedinUrl,
-        organization_id: attachTo,
-        source: "exa",
-      });
+      const person = await findOrCreatePerson(
+        {
+          name: judged.name,
+          title: judged.title,
+          linkedin_url: candidate.linkedinUrl,
+          organization_id: attachTo,
+          source: "exa",
+        },
+        supabase,
+      );
 
       await recordAffiliation(supabase, {
         personId: person.id,
@@ -400,7 +407,8 @@ export async function findContactsForOrganization(
       if (judged.verdict === "verified") verifiedCount++;
       else uncertainCount++;
 
-      if (campaignId) await linkPersonToCampaign(person.id, campaignId);
+      if (campaignId)
+        await linkPersonToCampaign(person.id, campaignId, supabase);
 
       contacts.push({
         id: person.id,

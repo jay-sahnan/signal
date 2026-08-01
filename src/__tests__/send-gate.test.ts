@@ -81,6 +81,35 @@ describe("canSendTo", () => {
     ).toEqual({ ok: true });
   });
 
+  it("allows an imported contact once its address verifies — csv_import clears the threshold", () => {
+    // The whole point of ranking csv_import at 0.85: an uploaded contact is
+    // draftable and sendable as-is, without waiting for further enrichment.
+    const result = canSendTo(
+      p({
+        work_email_source: "csv_import",
+        work_email_verification: "deliverable",
+        affiliation_source: "csv_import",
+        affiliation_confidence: AFFILIATION_WEIGHT.csv_import,
+      }),
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("does not trust an imported address without verification", () => {
+    // csv_import is deliberately absent from the trusted-source shortcuts:
+    // the just-in-time verifier must still prove an uploaded mailbox.
+    const result = canSendTo(
+      p({
+        work_email_source: "csv_import",
+        work_email_verification: "unchecked",
+        affiliation_source: "csv_import",
+        affiliation_confidence: AFFILIATION_WEIGHT.csv_import,
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/never been verified/i);
+  });
+
   it("blocks a verified address at an unconfirmed employer", () => {
     // A real mailbox is not permission to pitch them about a company they may
     // not work for.
