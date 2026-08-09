@@ -10,6 +10,10 @@ import {
 } from "@/lib/tools/ownership";
 import { saveOrganizationWebsite } from "@/lib/services/organization-website";
 import { parseLinkedInTitle } from "@/lib/utils";
+import {
+  NO_COMPANY_SEARCH_NOTE,
+  resultIsAboutPerson,
+} from "@/lib/services/person-enrichment";
 import { ExaService } from "@/lib/services/exa-service";
 import { filterRelevantResults } from "@/lib/services/relevance-filter";
 import { LinkedinService } from "@/lib/services/linkedin-service";
@@ -624,11 +628,17 @@ async function enrichContactById(
     );
   }
 
-  if (contactName !== "Unknown") {
+  if (contactName !== "Unknown" && !companyName) {
+    // With only a name, nothing can tie a result to this specific human:
+    // running the searches anyway is how namesake strangers' articles ended
+    // up stored as facts about a contact.
+    errors.push(NO_COMPANY_SEARCH_NOTE);
+  }
+
+  if (contactName !== "Unknown" && companyName) {
     const exa = new ExaService();
     const contactTitle = person?.title || null;
-    const queryParts = [`"${contactName}"`];
-    if (companyName) queryParts.push(`"${companyName}"`);
+    const queryParts = [`"${contactName}"`, `"${companyName}"`];
     if (contactTitle) queryParts.push(contactTitle);
     const specificQuery = queryParts.join(" ");
 
@@ -671,7 +681,13 @@ async function enrichContactById(
     }
 
     const dedup = (results: SummarySource[]) =>
-      results.filter((r) => !companyUrls.has(r.url));
+      results
+        .filter((r) => !companyUrls.has(r.url))
+        // Identity gate: only results that name the person AND the company
+        // survive. See resultIsAboutPerson in person-enrichment.
+        .filter((r) =>
+          resultIsAboutPerson(r, { name: contactName, companyName }),
+        );
 
     promises.push(
       (async () => {
