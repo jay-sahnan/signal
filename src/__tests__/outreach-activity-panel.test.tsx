@@ -27,6 +27,8 @@ function item(over: Partial<ActivityItem> = {}): ActivityItem {
     id: "se_1",
     source: "sent",
     state: "replied",
+    campaign_id: null,
+    campaign_name: null,
     person_name: "Dana Whitfield",
     person_title: "VP Engineering",
     company_name: "Fernpath",

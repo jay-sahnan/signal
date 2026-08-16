@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,10 @@ import {
 } from "@/components/outreach/outreach-drafts-panel";
 import { ReadyToSendHero } from "@/components/outreach/ready-to-send-hero";
 import { OutreachTabs } from "@/components/outreach/outreach-tabs";
+import {
+  CampaignPicker,
+  type CampaignBucket,
+} from "@/components/outreach/campaign-picker";
 import { apiFetch } from "@/lib/api-fetch";
 import type { ActivityItem } from "@/lib/outreach/activity";
 import type { ActivityFilter } from "@/components/outreach/outreach-activity-panel";
@@ -41,6 +45,8 @@ export interface EnrollmentCard {
   company_name: string | null;
   outreach_status: string | null;
   sequence_name: string;
+  campaign_id: string | null;
+  campaign_name: string | null;
 }
 
 export default function OutreachPage() {
@@ -49,6 +55,13 @@ export default function OutreachPage() {
   const [drafts, setDrafts] = useState<DraftRow[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const [campaigns, setCampaigns] = useState<{ id: string; name: string }[]>(
+    [],
+  );
+  // null = every campaign; otherwise a campaign id and every tab is scoped
+  // to it. One picker for the whole page, not one per tab, so Inbox, Sent
+  // and Pipeline never disagree about which campaign you are looking at.
+  const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const mountedRef = useRef(true);
 
@@ -63,6 +76,7 @@ export default function OutreachPage() {
       settingsRes,
       stepRowsRes,
       activityRes,
+      campaignsRes,
     ] = await Promise.all([
       supabase
         .from("sequences")
@@ -79,7 +93,7 @@ export default function OutreachPage() {
             current_step, status, next_send_at,
             people(name, title, organization_id, organizations!organization_id(name)),
             campaign_people(outreach_status),
-            sequences(name)
+            sequences(name, campaign_id, campaigns(name))
           `,
         )
         .in("status", ["waiting", "queued", "active", "replied"])
@@ -89,7 +103,8 @@ export default function OutreachPage() {
         .select(
           `
             id, subject, to_email, review_status, status, sent_at,
-            enrollment_id, sequence_id, sequence_step_id,
+            enrollment_id, sequence_id, sequence_step_id, campaign_id,
+            campaigns(name),
             sequence_enrollments(next_send_at, sequence_id),
             sequence_steps(step_number),
             sequences(name),
@@ -113,6 +128,7 @@ export default function OutreachPage() {
         .then((r) => r.json())
         // A failed activity fetch must not blank the rest of the page.
         .catch(() => ({ items: [] as ActivityItem[] })),
+      supabase.from("campaigns").select("id, name").order("name"),
     ]);
 
     if (!mountedRef.current) return;
@@ -184,7 +200,11 @@ export default function OutreachPage() {
       const cp = c.campaign_people as unknown as {
         outreach_status: string;
       } | null;
-      const seq = c.sequences as unknown as { name: string } | null;
+      const seq = c.sequences as unknown as {
+        name: string;
+        campaign_id: string | null;
+        campaigns: { name: string } | null;
+      } | null;
       return {
         id: c.id,
         sequence_id: c.sequence_id,
@@ -198,6 +218,8 @@ export default function OutreachPage() {
         company_name: person?.organizations?.name ?? null,
         outreach_status: cp?.outreach_status ?? null,
         sequence_name: seq?.name ?? "",
+        campaign_id: seq?.campaign_id ?? null,
+        campaign_name: seq?.campaigns?.name ?? null,
       };
     });
 
@@ -215,6 +237,7 @@ export default function OutreachPage() {
         step_number: number;
       } | null;
       const seq = d.sequences as unknown as { name: string } | null;
+      const campaign = d.campaigns as unknown as { name: string } | null;
       // The draft's own column, not just the enrollment embed: a draft
       // written into a sequence before (or without) enrollment still
       // belongs to that sequence's review queue.
@@ -230,6 +253,8 @@ export default function OutreachPage() {
         company_name: person?.organizations?.name ?? null,
         sequence_id: sequenceId,
         sequence_name: seq?.name ?? null,
+        campaign_id: d.campaign_id ?? null,
+        campaign_name: campaign?.name ?? null,
         next_send_at: enrollment?.next_send_at ?? null,
         step_number: step?.step_number ?? 1,
         total_steps: sequenceId ? (totalStepsBySeq.get(sequenceId) ?? 1) : 1,
@@ -238,6 +263,7 @@ export default function OutreachPage() {
       };
     });
 
+    setCampaigns(campaignsRes.data ?? []);
     setSequences(sequenceRows);
     setEnrollments(enrollmentCards);
     setDrafts(draftRows);
@@ -248,6 +274,65 @@ export default function OutreachPage() {
     );
     setLoading(false);
   }, []);
+
+  // Bucket counts per campaign, computed from the unfiltered sets so the
+  // picker always shows the whole picture no matter which chip is active.
+  const buckets = useMemo<CampaignBucket[]>(() => {
+    const byId = new Map<string, CampaignBucket>();
+    for (const c of campaigns) {
+      byId.set(c.id, {
+        id: c.id,
+        name: c.name,
+        drafts: 0,
+        ready: 0,
+        replied: 0,
+      });
+    }
+    // Campaigns that only exist on rows (e.g. deleted from the list but a
+    // draft still points at one) still get a chip so nothing is unreachable.
+    const ensure = (id: string | null, name: string | null) => {
+      if (!id) return null;
+      let b = byId.get(id);
+      if (!b) {
+        b = { id, name: name ?? "Unknown", drafts: 0, ready: 0, replied: 0 };
+        byId.set(id, b);
+      }
+      return b;
+    };
+    for (const d of drafts) {
+      const b = ensure(d.campaign_id, d.campaign_name);
+      if (!b) continue;
+      b.drafts++;
+      if (classifyDraft(d) === "ready") b.ready++;
+    }
+    for (const a of activity) {
+      const b = ensure(a.campaign_id, a.campaign_name);
+      if (b && a.state === "replied") b.replied++;
+    }
+    for (const s of sequences) ensure(s.campaign_id, s.campaign_name);
+    return Array.from(byId.values());
+  }, [campaigns, drafts, activity, sequences]);
+
+  // If the selected campaign vanishes (deleted, or its rows all drained and
+  // it was never in the campaigns table), behave as All rather than showing
+  // an empty page with no way out. Derived, not reset in an effect.
+  const activeCampaign =
+    selectedCampaign && buckets.some((b) => b.id === selectedCampaign)
+      ? selectedCampaign
+      : null;
+
+  const scoped = useMemo(() => {
+    if (!activeCampaign) {
+      return { drafts, enrollments, sequences, activity };
+    }
+    const id = activeCampaign;
+    return {
+      drafts: drafts.filter((d) => d.campaign_id === id),
+      enrollments: enrollments.filter((e) => e.campaign_id === id),
+      sequences: sequences.filter((s) => s.campaign_id === id),
+      activity: activity.filter((a) => a.campaign_id === id),
+    };
+  }, [activeCampaign, drafts, enrollments, sequences, activity]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -316,16 +401,24 @@ export default function OutreachPage() {
           </div>
         ) : (
           <>
+            {buckets.length > 1 && (
+              <CampaignPicker
+                buckets={buckets}
+                selectedId={activeCampaign}
+                onSelect={setSelectedCampaign}
+              />
+            )}
+
             <ReadyToSendHero
-              drafts={drafts.filter((d) => classifyDraft(d) === "ready")}
+              drafts={scoped.drafts.filter((d) => classifyDraft(d) === "ready")}
               onRefresh={load}
             />
 
             <OutreachTabs
-              drafts={drafts}
-              sequences={sequences}
-              enrollments={enrollments}
-              activity={activity}
+              drafts={scoped.drafts}
+              sequences={scoped.sequences}
+              enrollments={scoped.enrollments}
+              activity={scoped.activity}
               activityFilter={activityFilter}
               onActivityFilterChange={setActivityFilter}
               activityLoading={loading}

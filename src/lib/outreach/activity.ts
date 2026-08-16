@@ -34,6 +34,8 @@ export interface ActivityItem {
   id: string;
   source: "sent" | "pending";
   state: ActivityState;
+  campaign_id: string | null;
+  campaign_name: string | null;
   person_name: string | null;
   person_title: string | null;
   company_name: string | null;

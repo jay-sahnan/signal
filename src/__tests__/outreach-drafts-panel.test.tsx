@@ -32,6 +32,8 @@ function draft(over: Partial<DraftRow> = {}): DraftRow {
     company_name: "Trig",
     sequence_id: null,
     sequence_name: null,
+    campaign_id: null,
+    campaign_name: null,
     next_send_at: null,
     step_number: 1,
     total_steps: 1,

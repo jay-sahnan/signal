@@ -26,6 +26,8 @@ export interface DraftRow {
   company_name: string | null;
   sequence_id: string | null;
   sequence_name: string | null;
+  campaign_id: string | null;
+  campaign_name: string | null;
   next_send_at: string | null;
   step_number: number;
   total_steps: number;
@@ -256,6 +258,11 @@ export function OutreachDraftsPanel({
                           <p className="text-muted-foreground mt-0.5 truncate text-xs">
                             {firstDraft.subject || "(no subject)"}
                           </p>
+                          {firstDraft.campaign_name && (
+                            <p className="text-muted-foreground/80 mt-0.5 truncate text-[11px]">
+                              {firstDraft.campaign_name}
+                            </p>
+                          )}
                         </div>
 
                         <div className="flex shrink-0 items-center gap-2">
