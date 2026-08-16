@@ -49,8 +49,14 @@ interface PersonJoin {
  * two-level embed and widen the whole result to an error type, which then
  * hides every real field access behind a single unhelpful error.
  */
+interface CampaignJoin {
+  name: string | null;
+}
+
 interface SentRow {
   id: string;
+  campaign_id: string | null;
+  campaign: CampaignJoin | CampaignJoin[] | null;
   subject: string;
   to_email: string;
   from_email: string | null;
@@ -67,6 +73,8 @@ interface SentRow {
 
 interface PendingRow {
   id: string;
+  campaign_id: string | null;
+  campaign: CampaignJoin | CampaignJoin[] | null;
   subject: string;
   to_email: string;
   status: string;
@@ -106,7 +114,8 @@ export async function GET(request: Request) {
   let sentQuery = supabase
     .from("sent_emails")
     .select(
-      "id, subject, to_email, from_email, status, sent_at, message_id, " +
+      "id, campaign_id, subject, to_email, from_email, status, sent_at, message_id, " +
+        "campaign:campaigns(name), " +
         "person:people(name, title, organizations!people_organization_id_fkey(name)), " +
         "email_replies(kind, from_email, subject, received_at, body_text)",
     )
@@ -118,7 +127,8 @@ export async function GET(request: Request) {
   let pendingQuery = supabase
     .from("email_drafts")
     .select(
-      "id, subject, to_email, status, created_at, last_error, last_error_at, last_error_kind, " +
+      "id, campaign_id, subject, to_email, status, created_at, last_error, last_error_at, last_error_kind, " +
+        "campaign:campaigns(name), " +
         "person:people(name, title, organizations!people_organization_id_fkey(name)), " +
         "enrollment:sequence_enrollments(next_send_at)",
     )
@@ -152,6 +162,8 @@ export async function GET(request: Request) {
       id: row.id,
       source: "sent",
       state: classifySent(row.status),
+      campaign_id: row.campaign_id,
+      campaign_name: one(row.campaign)?.name ?? null,
       person_name: person?.name ?? null,
       person_title: person?.title ?? null,
       company_name: one(person?.organizations ?? null)?.name ?? null,
@@ -177,6 +189,8 @@ export async function GET(request: Request) {
     items.push({
       id: `draft:${row.id}`,
       source: "pending",
+      campaign_id: row.campaign_id,
+      campaign_name: one(row.campaign)?.name ?? null,
       state: classifyPending({
         status: row.status,
         last_error_kind: row.last_error_kind,

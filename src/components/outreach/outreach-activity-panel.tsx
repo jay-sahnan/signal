@@ -133,6 +133,11 @@ export function OutreachActivityPanel({
                         <div className="text-muted-foreground truncate text-xs">
                           {item.subject}
                         </div>
+                        {item.campaign_name && (
+                          <div className="text-muted-foreground/80 truncate text-[11px]">
+                            {item.campaign_name}
+                          </div>
+                        )}
                         {/* The reply, visible without opening anything and
                             without filtering. Replies being findable is the
                             entire point of this surface. */}
