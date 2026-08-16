@@ -57,6 +57,36 @@ export function salvageObject<T>(err: unknown, schema: z.ZodType<T>): T | null {
   return null;
 }
 
+/**
+ * "No object generated: response did not match schema." names no field, so a
+ * deterministic mismatch (a bound the wire schema could not carry, an enum
+ * the prompt contradicts) is indistinguishable from a flake until someone
+ * reproduces it by hand. Re-derives the Zod issues from the raw text rather
+ * than digging through the SDK's cause chain, whose shape is not stable.
+ *
+ * Returns e.g. "persona.signals: too_big", or null when there is nothing to
+ * say (not a schema rejection, or the text is not JSON).
+ */
+export function schemaIssueSummary<T>(
+  err: unknown,
+  schema: z.ZodType<T>,
+): string | null {
+  if (!NoObjectGeneratedError.isInstance(err) || !err.text) return null;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(err.text);
+  } catch {
+    return null;
+  }
+  const parsed = schema.safeParse(raw);
+  if (parsed.success) return null;
+  const issues = parsed.error.issues.slice(0, 5).map((i) => {
+    const path = i.path.map(String).join(".") || "(root)";
+    return `${path}: ${i.code}`;
+  });
+  return issues.join("; ");
+}
+
 /** Matches the three names the AI SDK treats as an abort rather than a failure. */
 function isAbort(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
@@ -90,7 +120,10 @@ export async function generateWithRetry<T>(
     } catch (err) {
       const salvaged = salvageObject(err, schema);
       if (salvaged) return { ok: true, value: salvaged };
-      if (err instanceof Error) lastError = err.message;
+      if (err instanceof Error) {
+        const issues = schemaIssueSummary(err, schema);
+        lastError = issues ? `${err.message} (${issues})` : err.message;
+      }
       // An aborted call is a deadline, not a flake — retrying burns the budget
       // the timeout exists to protect, and four 90s attempts overrun every
       // route's maxDuration.
