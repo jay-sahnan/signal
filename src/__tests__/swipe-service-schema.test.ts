@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { TranscriptSchema } from "@/lib/email-skills/swipe-service";
-import { buildBatchPrompt } from "@/lib/email-skills/swipe-prompts";
+import {
+  BatchSchema,
+  buildBatchPrompt,
+} from "@/lib/email-skills/swipe-prompts";
 import type { SwipeTranscript } from "@/lib/email-skills/swipe-prompts";
 
 /**
@@ -51,5 +54,41 @@ describe("TranscriptSchema personaLabel round-trip", () => {
       instructions: [],
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("BatchSchema persona bounds", () => {
+  const draft = {
+    subject: "s",
+    body: "b",
+    axes: {
+      opener: "signal",
+      tone: "blunt",
+      close: "question",
+      greeting: "hi",
+      signoff: "name",
+    },
+  };
+
+  // apiSafeSchema strips maxItems from the wire schema, so the model never
+  // sees the bound. Opus reliably invents three specifics for the persona; a
+  // cap of 2 rejected every opening batch on the voice deck as "response did
+  // not match schema", three retries in a row, with six good drafts inside.
+  it("accepts a persona with three invented signals", () => {
+    const parsed = BatchSchema.safeParse({
+      drafts: [draft, draft],
+      persona: {
+        name: "Priya Raman",
+        title: "VP Sales",
+        company: "Ledgerloop",
+        situation: "Just closed a Series B.",
+        signals: [
+          "Raised a Series B",
+          "Posted three AE roles",
+          "Dropped an agency",
+        ],
+      },
+    });
+    expect(parsed.success).toBe(true);
   });
 });

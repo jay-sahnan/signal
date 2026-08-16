@@ -72,10 +72,16 @@ export const PersonaSchema = z.object({
     .string()
     .max(300)
     .describe("One line: what is going on for them right now."),
+  // Bounds here never reach the model: apiSafeSchema strips minItems /
+  // maxItems from the wire schema, so this array is validated only after
+  // the fact. Opus reliably invents THREE specifics when asked for "1-2",
+  // and a cap of 2 rejected every batch (six good drafts, thrown away as
+  // "response did not match schema", three retries in a row). Generous on
+  // purpose: the prompt steers the count, the schema only stops abuse.
   signals: z
     .array(z.string().max(200))
     .min(1)
-    .max(2)
+    .max(6)
     .describe("Invented but plausible specifics the drafts may reference."),
 });
 export type Persona = z.infer<typeof PersonaSchema>;
@@ -341,7 +347,7 @@ function renderSender(sender: SwipeSender | null | undefined): string {
  * than a lie, which is what lets the variation rule spread across data-led and
  * signal-led openers without fabricating claims about somebody who exists.
  */
-const INVENT_RECIPIENT = `WHO THESE ARE TO: INVENT THE RECIPIENT. Before writing the drafts, invent one fictional but plausible person squarely inside the campaign's ICP (or a plausible generic B2B buyer when no campaign context is given): name, title, company, situation, and 1-2 invented specifics. Every draft in this batch is written to that same person, and you return the persona with the drafts. Recipient details are yours to invent: the person is fictional, so a made-up signal is not a lie, it is the exercise. Never reuse a persona that already appears in the judged drafts below.
+const INVENT_RECIPIENT = `WHO THESE ARE TO: INVENT THE RECIPIENT. Before writing the drafts, invent one fictional but plausible person squarely inside the campaign's ICP (or a plausible generic B2B buyer when no campaign context is given): name, title, company, situation, and 2-3 invented specifics. Every draft in this batch is written to that same person, and you return the persona with the drafts. Recipient details are yours to invent: the person is fictional, so a made-up signal is not a lie, it is the exercise. Never reuse a persona that already appears in the judged drafts below.
 
 THE SENDER IS REAL. Never invent facts about the sender: everything the drafts claim about who is writing (their offer, their numbers, their story) must come from the sender context above.`;
 

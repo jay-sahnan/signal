@@ -107,6 +107,22 @@ describe("generateWithRetry", () => {
     expect(run).toHaveBeenCalledTimes(3);
   });
 
+  // The voice deck failed three attempts in a row with the bare "response did
+  // not match schema" and nobody could tell which field. Bounds never reach the
+  // model (apiSafeSchema strips them), so a deterministic mismatch has to be
+  // named in the error or it reads as a flake forever.
+  it("names the failing schema path in the reported error", async () => {
+    const Bounded = z.object({ tags: z.array(z.string()).max(2) });
+    const run = vi
+      .fn()
+      .mockRejectedValue(
+        schemaError(JSON.stringify({ tags: ["a", "b", "c"] })),
+      );
+    const result = await generateWithRetry(run, Bounded, 2);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("tags: too_big");
+  });
+
   it("stops at `attempts` and reports the last error", async () => {
     const run = vi.fn().mockRejectedValue(new Error("overloaded"));
     const result = await generateWithRetry(run, Draft, 3);
