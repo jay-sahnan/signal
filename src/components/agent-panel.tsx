@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { UIMessage } from "ai";
 import { useChat } from "@ai-sdk/react";
 
@@ -15,6 +15,7 @@ import { useCampaign } from "@/lib/campaign-context";
 import { toTranscript } from "@/lib/email-skills/swipe-run";
 import { useStreaming } from "@/lib/streaming-context";
 import { useVoiceRun } from "@/lib/voice-run-context";
+import { isNavigablePath } from "@/lib/navigation";
 import { saveChat } from "@/lib/services/chat-history";
 import { createClient } from "@/lib/supabase/client";
 
@@ -162,6 +163,7 @@ function AgentPanelInner({
   const startX = useRef(0);
   const startWidth = useRef(0);
   const pathname = usePathname();
+  const router = useRouter();
   const { register } = useStreaming();
   const { consumePendingPrompt, pendingPrompt } = useCampaign();
   const {
@@ -192,6 +194,15 @@ function AgentPanelInner({
     transport,
     onData(part) {
       if (part.type === "data-turn-paused") turnPausedRef.current = true;
+      // openPage: the agent takes the user to a page instead of naming a
+      // path. Client-side push, so this panel and its chat stay exactly as
+      // they are. Transient, so a reloaded chat never re-navigates.
+      if (part.type === "data-navigate") {
+        const d = (part as { data?: { path?: unknown } }).data;
+        if (d && typeof d.path === "string" && isNavigablePath(d.path)) {
+          router.push(d.path);
+        }
+      }
       // Voice drafts and saves ride the stream as transient parts; the run
       // provider applies them so the deck updates while the agent talks.
       if (part.type.startsWith("data-voice-")) {
