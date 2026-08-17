@@ -297,6 +297,8 @@ export interface SwipeSender {
   /** Free-form profile notes: constraints and corrections the user wrote for
    * the drafter ("solo consultant", "do not use company name in sign-off"). */
   notes?: string | null;
+  /** Meeting-booking URL; drafts that ask for a call include it. */
+  bookingUrl?: string | null;
   /** The rendered SENDER FACT BANK block, already fenced by renderFactBank.
    * Null when the user has no facts, which renders nothing. */
   factBank?: string | null;
@@ -327,6 +329,10 @@ function renderSender(sender: SwipeSender | null | undefined): string {
         field("Company", sender.companyName),
         field("What they sell", sender.offeringSummary),
         field("Sender notes (follow these)", sender.notes),
+        field(
+          "Meeting link (when a draft asks for a call, link it inside the ask; never as the whole ask)",
+          sender.bookingUrl,
+        ),
       ].filter(Boolean) as string[])
     : [];
 

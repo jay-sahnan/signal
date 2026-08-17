@@ -327,6 +327,10 @@ export function buildSystemPrompt(options?: {
     if (p.personal_url) lines.push(`- Website: ${p.personal_url}`);
     if (p.linkedin_url) lines.push(`- LinkedIn: ${p.linkedin_url}`);
     if (p.twitter_url) lines.push(`- Twitter/X: ${p.twitter_url}`);
+    if (p.booking_url)
+      lines.push(
+        `- Meeting link: ${p.booking_url} (whenever an email you write asks for a call or meeting, include this as the way to book: linked on a short phrase inside the ask, never as the whole ask, never more than once)`,
+      );
     if (p.offering_summary) lines.push(`- Offering: ${p.offering_summary}`);
     if (p.notes) lines.push(`- Notes: ${p.notes}`);
 

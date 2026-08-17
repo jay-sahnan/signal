@@ -53,6 +53,7 @@ Body:
 The ask:
 - A short call is often the genuine offer, but a frictionless one is a documented AI tell. The ask must carry its reason: "15 minutes to compare notes on how you're handling SOC 2 evidence across regions". Never a bare "do you have 15 minutes?" and never a naked calendar link.
 - A specific question they can answer in one line beats a call whenever you have one.
+- MEETING LINK: if SENDER lists a meeting link and the ask is a call or meeting, the link goes in the email as the way to book: in bodyHtml as an <a href> on a short phrase inside the reasoned ask (never the bare URL as anchor text), and in bodyText as the raw URL on its own line right after the ask. Still one ask, still carrying its reason; the link is how they say yes, not the ask itself. Never write it when the ask is a one-line question, never write it more than once, and never invent a link when none is listed.
 
 Never write these. Each one marks the email as machine-written on sight:
 - "I saw you recently..." or "I noticed you're hiring", or any opener that would fit 500 other prospects
@@ -167,6 +168,9 @@ export function buildComposeUserPrompt(input: {
     company: string | null;
     offeringSummary?: string | null;
     notes?: string | null;
+    /** Meeting-booking URL. Rendered as its own SENDER line so the MEETING
+     * LINK rule in the system prompt has something concrete to point at. */
+    bookingUrl?: string | null;
   };
   previousSubject?: string | null;
   triggerReason?: string | null;
@@ -207,6 +211,10 @@ export function buildComposeUserPrompt(input: {
     );
   if (input.senderProfile.notes)
     senderLines.push(`- Sender notes: ${input.senderProfile.notes}`);
+  if (input.senderProfile.bookingUrl?.trim())
+    senderLines.push(
+      `- Meeting link (include when the ask is a call): ${input.senderProfile.bookingUrl.trim()}`,
+    );
   sections.push(`SENDER:\n${senderLines.join("\n")}`);
 
   sections.push(

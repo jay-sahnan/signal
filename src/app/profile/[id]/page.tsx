@@ -32,6 +32,7 @@ const emptyForm: ProfileFormData = {
   personal_url: "",
   linkedin_url: "",
   twitter_url: "",
+  booking_url: "",
   offering_summary: "",
   notes: "",
 };
@@ -91,6 +92,7 @@ export default function ProfileDetailPage() {
         personal_url: p.personal_url ?? "",
         linkedin_url: p.linkedin_url ?? "",
         twitter_url: p.twitter_url ?? "",
+        booking_url: p.booking_url ?? "",
         offering_summary: p.offering_summary ?? "",
         notes: p.notes ?? "",
       });
@@ -359,6 +361,25 @@ export default function ProfileDetailPage() {
                 placeholder="https://x.com/yourhandle"
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <label
+              htmlFor="booking_url"
+              className="text-sm font-medium leading-none"
+            >
+              Meeting link
+            </label>
+            <Input
+              id="booking_url"
+              type="url"
+              value={form.booking_url ?? ""}
+              onChange={(e) => update("booking_url", e.target.value)}
+              placeholder="https://cal.com/yourname/15min"
+            />
+            <p className="text-muted-foreground text-xs">
+              Calendly, Cal.com, or any booking page. Whenever an email asks for
+              a call, the agent includes this link as the way to book.
+            </p>
           </div>
         </section>
 

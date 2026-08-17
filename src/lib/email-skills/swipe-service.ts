@@ -164,6 +164,7 @@ async function loadPromptContext(
           companyName: profile.company_name,
           offeringSummary: profile.offering_summary,
           notes: profile.notes,
+          bookingUrl: profile.booking_url,
           factBank,
         }
       : null,

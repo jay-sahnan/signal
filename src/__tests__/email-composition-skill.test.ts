@@ -119,3 +119,29 @@ describe("buildComposeUserPrompt sender fields", () => {
     expect(prompt).not.toContain("Sender notes");
   });
 });
+
+describe("buildComposeUserPrompt meeting link", () => {
+  it("renders the booking URL as its own SENDER line when set", () => {
+    const prompt = buildComposeUserPrompt({
+      ...baseInput,
+      senderProfile: {
+        ...baseInput.senderProfile,
+        bookingUrl: "https://cal.com/jay/15min",
+      },
+    });
+    expect(prompt).toContain("Meeting link");
+    expect(prompt).toContain("https://cal.com/jay/15min");
+  });
+
+  // The system rule says "if SENDER lists a meeting link"; an empty or
+  // whitespace value must not render a line the model could read as one.
+  it("omits the line when the URL is unset or blank", () => {
+    for (const bookingUrl of [undefined, null, "", "   "]) {
+      const prompt = buildComposeUserPrompt({
+        ...baseInput,
+        senderProfile: { ...baseInput.senderProfile, bookingUrl },
+      });
+      expect(prompt).not.toContain("Meeting link");
+    }
+  });
+});

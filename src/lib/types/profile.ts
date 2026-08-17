@@ -8,6 +8,9 @@ export interface UserProfile {
   personal_url: string | null;
   linkedin_url: string | null;
   twitter_url: string | null;
+  /** Meeting-booking link (Calendly, Cal.com, ...). Drafts that ask for a
+   * call include it as the way to book. */
+  booking_url: string | null;
   role_title: string | null;
   offering_summary: string | null;
   notes: string | null;
