@@ -92,9 +92,11 @@ import {
   suppressContact,
   getOutreachPerformance,
 } from "./learning-tools";
+import { openPage } from "./navigation-tools";
 import { getPostHogClient } from "@/lib/posthog-server";
 
 const rawTools = {
+  openPage,
   saveCampaign,
   getCampaign,
   listCampaigns,

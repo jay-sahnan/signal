@@ -27,3 +27,39 @@ describe("Markdown domain auto-linking", () => {
     expect(container.querySelector("code a")).toBeNull();
   });
 });
+
+/**
+ * The agent used to say "head to /outreach/review?sequence=..." as bare prose
+ * the user had to copy into the address bar, and every markdown link opened a
+ * NEW tab, leaving the chat behind. In-app paths are now links that navigate
+ * the current tab; external URLs still open a new tab.
+ */
+describe("Markdown in-app paths", () => {
+  it("links a bare app path in prose, same tab", () => {
+    render(
+      <Markdown>
+        {"Approve them at /outreach/review?sequence=abc-123 when ready."}
+      </Markdown>,
+    );
+    const link = screen.getByRole("link", {
+      name: "/outreach/review?sequence=abc-123",
+    });
+    expect(link).toHaveAttribute("href", "/outreach/review?sequence=abc-123");
+    expect(link).not.toHaveAttribute("target");
+  });
+
+  it("does not link slashes that are not app routes", () => {
+    const { container } = render(
+      <Markdown>{"saved to /tmp/out.csv, ratio 3/4"}</Markdown>,
+    );
+    expect(container.querySelector("a")).toBeNull();
+  });
+
+  it("keeps external markdown links in a new tab", () => {
+    render(<Markdown>{"[docs](https://example.com/docs)"}</Markdown>);
+    expect(screen.getByRole("link", { name: "docs" })).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+  });
+});

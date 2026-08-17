@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Activity,
   AlertCircle,
+  ArrowUpRight,
   BarChart3,
   Bookmark,
   Building2,
@@ -26,6 +28,8 @@ import {
 } from "lucide-react";
 
 import { ContactCards } from "./contact-card";
+import { buttonVariants } from "@/components/ui/button";
+import { isNavigablePath } from "@/lib/navigation";
 
 export interface ToolCallCardProps {
   toolName: string;
@@ -114,6 +118,8 @@ const TOOL_CONFIG: Record<
   draftSequenceEmails: { label: "Drafting sequence emails", icon: Mail },
   draftEmailsForSequence: { label: "Drafting sequence emails", icon: Mail },
   getSequenceStatus: { label: "Loading sequence status", icon: List },
+  // Navigation
+  openPage: { label: "Opening page", icon: ArrowUpRight },
   // Voice
   startVoiceRun: { label: "Starting voice drafting", icon: Mic },
   rewriteVoiceDrafts: { label: "Rewriting drafts", icon: Mic },
@@ -186,6 +192,27 @@ export function ToolCallCard({
   const hasOutput = state === "output-available";
   const hasError = state === "output-error";
   const isInline = INLINE_TOOLS.has(toolName);
+
+  // openPage already navigated the tab when it ran; what stays in the
+  // transcript is a button back to the page, so the destination is one click
+  // away after the turn ends or the chat is reloaded. Same-tab Next link:
+  // the chat panel lives in the shell and survives client-side navigation.
+  if (toolName === "openPage" && hasOutput && output != null) {
+    const nav = output as { path?: unknown; label?: unknown; error?: unknown };
+    if (typeof nav.path === "string" && isNavigablePath(nav.path)) {
+      return (
+        <div className="my-1">
+          <Link
+            href={nav.path}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <ArrowUpRight className="h-3.5 w-3.5" />
+            Open {typeof nav.label === "string" ? nav.label : "page"}
+          </Link>
+        </div>
+      );
+    }
+  }
 
   // Inline tools render their results directly below the status bar
   if (isInline && hasOutput && output != null) {
