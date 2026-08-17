@@ -26,6 +26,13 @@ export const updateUserProfile = tool({
     personal_url: z.string().url().optional().describe("Personal website URL"),
     linkedin_url: z.string().optional().describe("LinkedIn profile URL"),
     twitter_url: z.string().optional().describe("Twitter/X profile URL"),
+    booking_url: z
+      .string()
+      .url()
+      .optional()
+      .describe(
+        "Meeting-booking link (Calendly, Cal.com, etc.). Once set, every email that asks for a call includes it as the way to book.",
+      ),
     offering_summary: z
       .string()
       .optional()

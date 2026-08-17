@@ -313,7 +313,9 @@ async function pickAndDraft(
   if (campaign?.profile_id) {
     const { data: profile } = await supabase
       .from("user_profile")
-      .select("id, name, role_title, company_name, offering_summary, notes")
+      .select(
+        "id, name, role_title, company_name, offering_summary, notes, booking_url",
+      )
       .eq("id", campaign.profile_id)
       .single();
     senderProfile = (profile as Record<string, unknown>) ?? null;
@@ -471,6 +473,7 @@ async function pickAndDraft(
           company: (senderProfile?.company_name as string) ?? null,
           offeringSummary: (senderProfile?.offering_summary as string) ?? null,
           notes: (senderProfile?.notes as string) ?? null,
+          bookingUrl: (senderProfile?.booking_url as string) ?? null,
         },
         factBank,
         learnings,

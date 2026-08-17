@@ -358,7 +358,9 @@ export const draftEmailsForSequence = tool({
     const { data: profile } = campaign.profile_id
       ? await supabase
           .from("user_profile")
-          .select("id, name, role_title, company_name, offering_summary, notes")
+          .select(
+            "id, name, role_title, company_name, offering_summary, notes, booking_url",
+          )
           .eq("id", campaign.profile_id)
           .single()
       : { data: null };
@@ -558,6 +560,7 @@ export const draftEmailsForSequence = tool({
               company: profile?.company_name ?? null,
               offeringSummary: profile?.offering_summary ?? null,
               notes: profile?.notes ?? null,
+              bookingUrl: profile?.booking_url ?? null,
             },
             factBank,
             learnings,
