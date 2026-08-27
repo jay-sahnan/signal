@@ -208,6 +208,9 @@ export async function findEmailForPerson(
   const { first, last } = splitName(person.name);
   const provider = getEmailProvider();
   const candidates: EmailCandidate[] = [];
+  // Set by the pattern tiers; a confident pattern makes the paid Exa scrape
+  // redundant for free discovery (the send gate verifies the guess later).
+  let haveConfidentPattern = false;
   // Discovery is free by default; credits are spent only when explicitly asked
   // (revalidate / the send gate's JIT path), so the daily send cap is the
   // effective verification budget.
@@ -244,6 +247,7 @@ export async function findEmailForPerson(
       orgPattern?.pattern &&
       orgPattern.confidence >= PATTERN_CONFIDENCE_THRESHOLD
     ) {
+      const before = candidates.length;
       pushCandidate(
         candidates,
         toCandidate(
@@ -254,6 +258,10 @@ export async function findEmailForPerson(
         first,
         last,
       );
+      // Only a rendered candidate earns the skip: a {first}.{last} pattern
+      // for a single-token name produces nothing, and then Exa is the only
+      // free tier left.
+      if (candidates.length > before) haveConfidentPattern = true;
     }
   }
 
@@ -285,31 +293,18 @@ export async function findEmailForPerson(
     );
   }
 
-  // ── 3) Exa scrape of pages mentioning the person.
-  for (const email of await searchEmailsViaExa(
-    person.name,
-    domain,
-    first,
-    last,
-    personId,
-  )) {
-    pushCandidate(
-      candidates,
-      toCandidate(email, "exa_search", SOURCE_WEIGHT.exa_search),
-      first,
-      last,
-    );
-  }
-
-  // ── 4) On-the-fly inference from any verified emails already on the org.
+  // ── 3) On-the-fly inference from any verified emails already on the org.
   //       Covers the case where the org has evidence but the cached pattern
-  //       hasn't been recomputed or sits below the threshold.
+  //       hasn't been recomputed or sits below the threshold. Runs before the
+  //       Exa scrape because it is a free DB read and, when confident, makes
+  //       that paid search unnecessary.
   if (domainAcceptsMail && domain && person.organization_id && first && last) {
     const inferred = await inferPatternFromOrg(
       supabase,
       person.organization_id,
     );
     if (inferred?.pattern) {
+      const before = candidates.length;
       pushCandidate(
         candidates,
         toCandidate(
@@ -317,6 +312,35 @@ export async function findEmailForPerson(
           "pattern_derived",
           inferred.confidence * PATTERN_DERIVED_CONFIDENCE_FACTOR,
         ),
+        first,
+        last,
+      );
+      if (
+        candidates.length > before &&
+        inferred.confidence >= PATTERN_CONFIDENCE_THRESHOLD
+      ) {
+        haveConfidentPattern = true;
+      }
+    }
+  }
+
+  // ── 4) Exa scrape of pages mentioning the person. Skipped for free
+  //       discovery when a confident pattern already produced a suggestion:
+  //       it was a third of all Exa spend, and the send gate proves or kills
+  //       the pattern guess anyway. When verifying (a guess was just proven
+  //       dead) it runs regardless, with the response cache bypassed.
+  if (wantVerify || !haveConfidentPattern) {
+    for (const email of await searchEmailsViaExa(
+      person.name,
+      domain,
+      first,
+      last,
+      personId,
+      wantVerify,
+    )) {
+      pushCandidate(
+        candidates,
+        toCandidate(email, "exa_search", SOURCE_WEIGHT.exa_search),
         first,
         last,
       );
@@ -635,6 +659,7 @@ async function searchEmailsViaExa(
   first: string | null,
   last: string | null,
   personId: string,
+  bypassCache = false,
 ): Promise<string[]> {
   const searchQuery = domain
     ? `"${name}" "${domain}" email`
@@ -647,6 +672,7 @@ async function searchEmailsViaExa(
     const results = await exa.search(searchQuery, {
       numResults: 5,
       includeText: true,
+      bypassCache,
     });
 
     for (const result of results.results) {
