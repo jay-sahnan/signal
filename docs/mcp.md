@@ -1,13 +1,13 @@
 # Driving Signal from Claude Code or Codex
 
-Signal exposes its agent tools over MCP at `https://<your-app>/api/mcp`.
+Signal exposes its agent tools over MCP at `https://<your-app>/api/mcp/mcp`.
 Sign in once in the browser; from then on your coding agent calls the same
 tools the web chat uses, scoped to your account.
 
 ## Connect
 
-    claude mcp add --transport http signal https://<your-app>/api/mcp
-    codex mcp add signal --url https://<your-app>/api/mcp
+    claude mcp add --transport http signal https://<your-app>/api/mcp/mcp
+    codex mcp add signal --url https://<your-app>/api/mcp/mcp
 
 Your client opens Clerk's sign-in page. Approve, and you are done.
 

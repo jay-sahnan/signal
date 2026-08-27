@@ -10,8 +10,8 @@ instance and call the same tools the web chat agent uses, as themselves, with
 one command and a browser sign-in. No keys to copy, no local process to run.
 
 ```
-claude mcp add --transport http signal https://<app>/api/mcp
-codex mcp add signal --url https://<app>/api/mcp
+claude mcp add --transport http signal https://<app>/api/mcp/mcp
+codex mcp add signal --url https://<app>/api/mcp/mcp
 ```
 
 ## Decisions
