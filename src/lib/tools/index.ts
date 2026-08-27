@@ -93,6 +93,7 @@ import {
   getOutreachPerformance,
 } from "./learning-tools";
 import { openPage } from "./navigation-tools";
+import { getCurrentIdentity } from "@/lib/auth/identity";
 import { getPostHogClient } from "@/lib/posthog-server";
 
 const rawTools = {
@@ -187,7 +188,9 @@ function withTelemetry<T extends ToolWithExecute>(name: string, t: T): T {
     const start = Date.now();
     const ctx = (opts as { experimental_context?: ToolCtx } | undefined)
       ?.experimental_context;
-    const distinctId = ctx?.userId ?? "anonymous";
+    // MCP calls pass no experimental_context; the identity scope carries the user.
+    const identity = getCurrentIdentity();
+    const distinctId = ctx?.userId ?? identity?.userId ?? "anonymous";
     let success = true;
     let errorMessage: string | undefined;
     try {
@@ -203,6 +206,7 @@ function withTelemetry<T extends ToolWithExecute>(name: string, t: T): T {
           event: "tool_called",
           properties: {
             tool_name: name,
+            source: identity?.source ?? "web",
             success,
             duration_ms: Date.now() - start,
             campaign_id: ctx?.campaignId ?? null,

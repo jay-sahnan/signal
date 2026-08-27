@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
+import { getCurrentIdentity } from "@/lib/auth/identity";
 import { getAdminClient } from "@/lib/supabase/admin";
 
 // ── Pricing constants (USD) ──────────────────────────────────────────────
@@ -228,7 +229,12 @@ export function trackUsage(entry: UsageEntry): void {
           tokens_input: entry.tokens_input ?? null,
           tokens_output: entry.tokens_output ?? null,
           estimated_cost_usd: entry.estimated_cost_usd,
-          metadata: entry.metadata ?? {},
+          metadata: {
+            ...(entry.metadata ?? {}),
+            // Where the spend came from: the MCP route injects an identity;
+            // the web app and jobs have none, so they read as "web".
+            source: getCurrentIdentity()?.source ?? "web",
+          },
           campaign_id: entry.campaign_id ?? null,
           // Explicit wins; otherwise inherit whoever the action belongs to.
           user_id: entry.user_id ?? ctx?.user_id ?? null,
