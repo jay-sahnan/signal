@@ -70,7 +70,20 @@ export function titleCore(title: string): string {
 }
 
 /**
+ * Same word, allowing for inflection: engineer/engineering, operation/
+ * operations. Short tokens must match exactly so "it" never matches
+ * "digital" or "item".
+ */
+function tokenMatches(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length < 4 || b.length < 4) return false;
+  return a.startsWith(b) || b.startsWith(a);
+}
+
+/**
  * Does this person's title belong to the family of any target title?
+ * Every word of the target's core must appear as a whole word in the
+ * person's title, in any order ("Engineer, Growth" is a Growth Engineer).
  * Untitled people never match: with no role there is nothing to compare.
  */
 export function titleMatchesAny(
@@ -78,10 +91,13 @@ export function titleMatchesAny(
   targets: string[],
 ): boolean {
   if (!personTitle) return false;
-  const person = normalise(personTitle);
-  if (!person) return false;
+  const personTokens = normalise(personTitle).split(" ").filter(Boolean);
+  if (personTokens.length === 0) return false;
   return targets.some((target) => {
-    const core = titleCore(target);
-    return core.length > 0 && person.includes(core);
+    const coreTokens = titleCore(target).split(" ").filter(Boolean);
+    return (
+      coreTokens.length > 0 &&
+      coreTokens.every((c) => personTokens.some((p) => tokenMatches(p, c)))
+    );
   });
 }

@@ -29,6 +29,22 @@ describe("titleMatchesAny", () => {
     expect(titleMatchesAny("Co-founder & CTO", targets)).toBe(true);
     expect(titleMatchesAny("Chief Technology Officer", targets)).toBe(true);
   });
+  it("matches whole words only, never substrings", () => {
+    expect(titleMatchesAny("Digital Marketing Manager", ["Head of IT"])).toBe(
+      false,
+    );
+    expect(titleMatchesAny("IT Manager", ["Head of IT"])).toBe(true);
+    expect(titleMatchesAny("Item Coordinator", ["Head of IT"])).toBe(false);
+  });
+  it("matches multi-word roles in any order and inflection", () => {
+    expect(titleMatchesAny("Engineer, Growth", ["Growth Engineer"])).toBe(true);
+    expect(
+      titleMatchesAny("VP of Operations, Revenue", ["Revenue Operations Lead"]),
+    ).toBe(true);
+    expect(titleMatchesAny("Growth Marketing", ["Growth Engineer"])).toBe(
+      false,
+    );
+  });
   it("rejects other departments", () => {
     expect(titleMatchesAny("CFO", targets)).toBe(false);
     expect(titleMatchesAny("Software Engineer", targets)).toBe(false);
