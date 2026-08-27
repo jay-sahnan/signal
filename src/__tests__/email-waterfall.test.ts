@@ -530,6 +530,15 @@ describe("findEmailForPerson Exa gating", () => {
     expect(exaSearch).not.toHaveBeenCalled();
   });
 
+  it("still searches Exa when the pattern cannot render for a single-token name", async () => {
+    seed(
+      { name: "Madonna" },
+      { email_pattern: "{first}.{last}", email_pattern_confidence: 0.9 },
+    );
+    await findEmailForPerson("p1", {});
+    expect(exaSearch).toHaveBeenCalledTimes(1);
+  });
+
   it("still searches Exa when no pattern is known", async () => {
     await findEmailForPerson("p1", {});
     expect(exaSearch).toHaveBeenCalledTimes(1);

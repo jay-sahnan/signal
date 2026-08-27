@@ -96,6 +96,16 @@ describe("Exa response cache", () => {
     expect(h.exaCalls).toBe(2);
   });
 
+  it("shares one Exa call between identical searches in flight", async () => {
+    const exa = new ExaService();
+    await Promise.all([
+      exa.search("burst", {}),
+      exa.search("burst", {}),
+      exa.search("BURST", {}),
+    ]);
+    expect(h.exaCalls).toBe(1);
+  });
+
   it("bypassCache always searches", async () => {
     const exa = new ExaService();
     await exa.search("fresh", {});

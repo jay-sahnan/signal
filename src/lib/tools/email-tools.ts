@@ -247,7 +247,7 @@ export async function findEmailForPerson(
       orgPattern?.pattern &&
       orgPattern.confidence >= PATTERN_CONFIDENCE_THRESHOLD
     ) {
-      haveConfidentPattern = true;
+      const before = candidates.length;
       pushCandidate(
         candidates,
         toCandidate(
@@ -258,6 +258,10 @@ export async function findEmailForPerson(
         first,
         last,
       );
+      // Only a rendered candidate earns the skip: a {first}.{last} pattern
+      // for a single-token name produces nothing, and then Exa is the only
+      // free tier left.
+      if (candidates.length > before) haveConfidentPattern = true;
     }
   }
 
@@ -300,9 +304,7 @@ export async function findEmailForPerson(
       person.organization_id,
     );
     if (inferred?.pattern) {
-      if (inferred.confidence >= PATTERN_CONFIDENCE_THRESHOLD) {
-        haveConfidentPattern = true;
-      }
+      const before = candidates.length;
       pushCandidate(
         candidates,
         toCandidate(
@@ -313,6 +315,12 @@ export async function findEmailForPerson(
         first,
         last,
       );
+      if (
+        candidates.length > before &&
+        inferred.confidence >= PATTERN_CONFIDENCE_THRESHOLD
+      ) {
+        haveConfidentPattern = true;
+      }
     }
   }
 

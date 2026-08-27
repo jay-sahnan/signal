@@ -42,6 +42,11 @@ export interface ExaSearchOptions {
 
 const TIMEOUT_MS = 30_000;
 
+// Identical searches that overlap (a batch fanning out over the same
+// company) would each miss the cache and each pay Exa; share one promise
+// per key while it is in flight.
+const inFlight = new Map<string, Promise<ExaSearchResponse>>();
+
 // ── Concurrency limiter ────────────────────────────────────────────────────
 // Exa allows 10 QPS on search. Cap at 8 to leave headroom.
 const MAX_CONCURRENT = 8;
@@ -144,17 +149,23 @@ export class ExaService {
         return cached;
       }
     }
-    await acquire();
-    try {
-      const response = await withRetry(
-        () => this.executeSearch(query, options),
-        query,
-      );
-      await writeExaCache(key, query, options, response);
-      return response;
-    } finally {
-      release();
-    }
+    const pending = inFlight.get(key);
+    if (pending) return pending;
+    const run = (async () => {
+      await acquire();
+      try {
+        const response = await withRetry(
+          () => this.executeSearch(query, options),
+          query,
+        );
+        await writeExaCache(key, query, options, response);
+        return response;
+      } finally {
+        release();
+      }
+    })().finally(() => inFlight.delete(key));
+    inFlight.set(key, run);
+    return run;
   }
 
   private async executeSearch(
