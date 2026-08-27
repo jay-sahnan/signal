@@ -9,6 +9,10 @@ describe("mcp registry", () => {
     expect(names).toContain("searchCompanies");
     expect(names).toContain("deleteCompanies");
     expect(names).toContain("openPage");
+    // Voice tools need the chat UI's swipe run; useless over MCP.
+    expect(names).not.toContain("startVoiceRun");
+    expect(names).not.toContain("rewriteVoiceDrafts");
+    expect(names).not.toContain("saveVoiceProfile");
     expect(names).toContain("sendEmail");
     for (const t of mcpToolList()) {
       expect(t.description.length).toBeGreaterThan(0);
