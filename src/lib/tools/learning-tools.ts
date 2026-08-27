@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@clerk/nextjs/server";
+import { actingUserId } from "@/lib/auth/acting-user";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -63,7 +63,7 @@ export const addEmailLearning = tool({
     confidence: z.enum(LEARNING_CONFIDENCE).optional().describe("Default low."),
   }),
   execute: async (input) => {
-    const { userId } = await auth();
+    const userId = await actingUserId();
     if (!userId) return { error: "Not authenticated." };
     const supabase = await createClient();
     const { data, error } = await supabase
@@ -118,7 +118,7 @@ export const suppressContact = tool({
       .describe("Why, shown in the suppression list UI."),
   }),
   execute: async (input) => {
-    const { userId } = await auth();
+    const userId = await actingUserId();
     if (!userId) return { error: "Not authenticated." };
     const supabase = await createClient();
     const { error } = await supabase.from("outreach_suppressions").upsert(
@@ -154,7 +154,7 @@ export const getOutreachPerformance = tool({
       .describe("Restrict to one campaign."),
   }),
   execute: async (input) => {
-    const { userId } = await auth();
+    const userId = await actingUserId();
     if (!userId) return { error: "Not authenticated." };
     const supabase = await createClient();
     const windowStart = new Date(

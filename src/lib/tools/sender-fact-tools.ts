@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@clerk/nextjs/server";
+import { actingUserId } from "@/lib/auth/acting-user";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
@@ -67,7 +67,7 @@ export const researchSenderProfile = tool({
       .describe("Profile to research. Omit to use the most recent profile."),
   }),
   execute: async (input) => {
-    const { userId } = await auth();
+    const userId = await actingUserId();
     if (!userId) return { error: "Not authenticated." };
 
     const supabase = await createClient();
@@ -150,7 +150,7 @@ export const addSenderFacts = tool({
       .max(10),
   }),
   execute: async (input) => {
-    const { userId } = await auth();
+    const userId = await actingUserId();
     if (!userId) return { error: "Not authenticated." };
 
     const supabase = await createClient();

@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@clerk/nextjs/server";
+import { actingUserId } from "@/lib/auth/acting-user";
 import { createClient } from "@/lib/supabase/server";
 
 export const updateUserProfile = tool({
@@ -80,7 +80,7 @@ export const updateUserProfile = tool({
       return { profile, action: "updated", updated: Object.keys(fields) };
     }
 
-    const { userId } = await auth();
+    const userId = await actingUserId();
     if (!userId) throw new Error("Not authenticated");
 
     const { data: profile, error } = await supabase
