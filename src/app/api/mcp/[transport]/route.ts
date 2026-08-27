@@ -2,6 +2,7 @@ import { createMcpHandler, withMcpAuth } from "mcp-handler";
 
 import { runWithIdentity } from "@/lib/auth/identity";
 import { verifyMcpBearer } from "@/lib/mcp/auth";
+import { mcpConfigError } from "@/lib/mcp/config";
 import { mcpToolList, toMcpResult } from "@/lib/mcp/registry";
 
 // Same ceiling as /api/chat: enrichment batches run for minutes.
@@ -46,4 +47,20 @@ const authed = withMcpAuth(
   },
 );
 
-export { authed as GET, authed as POST, authed as DELETE };
+let warned = false;
+function guarded(h: (req: Request) => Promise<Response>) {
+  return async (req: Request) => {
+    const problem = mcpConfigError();
+    if (problem) {
+      if (!warned) {
+        warned = true;
+        console.error(`FATAL: ${problem}`);
+      }
+      return Response.json({ error: problem }, { status: 503 });
+    }
+    return h(req);
+  };
+}
+export const GET = guarded(authed);
+export const POST = guarded(authed);
+export const DELETE = guarded(authed);
