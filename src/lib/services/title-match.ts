@@ -70,14 +70,19 @@ export function titleCore(title: string): string {
 }
 
 /**
- * Same word, allowing for inflection: engineer/engineering, operation/
- * operations. Short tokens must match exactly so "it" never matches
- * "digital" or "item".
+ * Same word allowing only for inflection: engineer/engineering,
+ * operation/operations, market/marketing. Deliberately not a prefix test,
+ * which would pair product with production; and short tokens are compared
+ * whole so "it" never matches "digital" or "item".
  */
+function stem(token: string): string {
+  if (token.length > 5 && token.endsWith("ing")) return token.slice(0, -3);
+  if (token.length > 3 && token.endsWith("s")) return token.slice(0, -1);
+  return token;
+}
+
 function tokenMatches(a: string, b: string): boolean {
-  if (a === b) return true;
-  if (a.length < 4 || b.length < 4) return false;
-  return a.startsWith(b) || b.startsWith(a);
+  return a === b || stem(a) === stem(b);
 }
 
 /**
