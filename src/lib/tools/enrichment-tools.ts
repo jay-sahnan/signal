@@ -1804,6 +1804,12 @@ export const findContacts = tool({
       .max(10)
       .default(3)
       .describe("Number of results per title search"),
+    includeTeamPage: z
+      .enum(["matching", "all"])
+      .optional()
+      .describe(
+        "Who from the company's own team page joins the campaign. Default 'matching': only people whose title is in the family of a target title (Head of Growth also catches Growth Lead, VP Growth). 'all': link every listed employee, for 'get me everyone at this company'.",
+      ),
   }),
   execute: async (input) => {
     if (!input.companyId && !input.organizationId) {
@@ -1871,6 +1877,7 @@ export const findContacts = tool({
       campaignId: input.campaignId ?? null,
       titles: targetTitles,
       numResults: input.numResults,
+      linkTeamPage: input.includeTeamPage ?? "matching",
     });
 
     return {
@@ -1894,15 +1901,26 @@ export const findContacts = tool({
       // "unchanged", and describing them as verified or departed would be
       // describing a write that was refused.
       affiliationUnchanged: result.affiliationUnchanged,
+      // Team-page staff outside the target roles: stored in the shared
+      // pool, not linked here. Reported so the agent can offer them.
+      teamPageUnlinked: result.teamPageUnlinked,
       // The same prose searchPeople returns. Without it this path handed the
       // agent bare numbers and left it to guess what "affiliationUnchanged: 2"
       // meant, which it got wrong in exactly the direction that flatters the
       // result.
-      note: affiliationNotes({
-        uncertainCount: result.uncertainCount,
-        departedCount: result.departedCount,
-        affiliationUnchanged: result.affiliationUnchanged,
-      }),
+      note:
+        [
+          affiliationNotes({
+            uncertainCount: result.uncertainCount,
+            departedCount: result.departedCount,
+            affiliationUnchanged: result.affiliationUnchanged,
+          }),
+          result.teamPageUnlinked > 0
+            ? `${result.teamPageUnlinked} other people on the company's team page were stored but not added to the campaign because their titles are outside the target roles. Pass includeTeamPage: "all" to add everyone.`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" ") || undefined,
       error: result.error,
     };
   },

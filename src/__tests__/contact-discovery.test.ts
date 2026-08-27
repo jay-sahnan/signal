@@ -14,9 +14,12 @@ import { createSupabaseFake } from "./helpers/supabase-fake";
  */
 
 const judged = vi.fn();
+const { domainPeople } = vi.hoisted(() => ({
+  domainPeople: vi.fn().mockResolvedValue([] as unknown[]),
+}));
 vi.mock("@/lib/services/contact-filter", () => ({
   filterContactsByCompany: (...args: unknown[]) => judged(...args),
-  findPeopleOnDomain: vi.fn().mockResolvedValue([]),
+  findPeopleOnDomain: domainPeople,
 }));
 
 const exaResults = {
@@ -87,6 +90,7 @@ import {
   findContactsForOrganization,
   MAX_ALREADY_LINKED,
 } from "@/lib/services/contact-discovery";
+import { linkPersonToCampaign } from "@/lib/services/knowledge-base";
 
 /** The organization under test. */
 let org: Record<string, unknown> = {};
@@ -144,6 +148,7 @@ beforeEach(() => {
   orgPeople = [];
   readErrors = {};
   judged.mockReset().mockResolvedValue([]);
+  domainPeople.mockReset().mockResolvedValue([]);
   org = {
     id: "org-1",
     name: "Browserbase",
@@ -745,5 +750,55 @@ describe("someone filed elsewhere with stronger evidence", () => {
     expect(result.affiliationUnchanged).toBe(0);
     expect(result.rejectedAsWrongCompany).toBe(1);
     expect(vi.mocked(linkPersonToCampaign)).not.toHaveBeenCalled();
+  });
+});
+
+// ─── The team page lists everyone; the campaign asked for some roles ──────
+
+describe("team-page linking", () => {
+  const teamPage = [
+    {
+      name: "Gina Growth",
+      title: "Growth Lead",
+      linkedinUrl: null,
+      email: null,
+    },
+    { name: "Fred Finance", title: "CFO", linkedinUrl: null, email: null },
+    { name: "Nora Notitle", title: null, linkedinUrl: null, email: null },
+  ];
+  const runWithCampaign = (linkTeamPage?: "matching" | "all") =>
+    findContactsForOrganization(client(), {
+      organizationId: "org-1",
+      campaignId: "camp-1",
+      titles: ["Head of Growth"],
+      numResults: 3,
+      linkTeamPage,
+    });
+
+  it("stores everyone but links only the target role family by default", async () => {
+    domainPeople.mockResolvedValue(teamPage);
+    const link = vi.mocked(linkPersonToCampaign);
+    link.mockClear();
+    const result = await runWithCampaign();
+    expect(created.map((c) => c.name)).toEqual([
+      "Gina Growth",
+      "Fred Finance",
+      "Nora Notitle",
+    ]);
+    expect(affiliations).toHaveLength(3);
+    expect(link).toHaveBeenCalledTimes(1);
+    expect(result.contacts.map((c) => c.name)).toEqual(["Gina Growth"]);
+    expect(result.teamPageUnlinked).toBe(2);
+    expect(result.verifiedCount).toBe(1);
+  });
+
+  it("links every listed employee when asked for all", async () => {
+    domainPeople.mockResolvedValue(teamPage);
+    const link = vi.mocked(linkPersonToCampaign);
+    link.mockClear();
+    const result = await runWithCampaign("all");
+    expect(link).toHaveBeenCalledTimes(3);
+    expect(result.teamPageUnlinked).toBe(0);
+    expect(result.contacts).toHaveLength(3);
   });
 });
