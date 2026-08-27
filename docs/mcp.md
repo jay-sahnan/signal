@@ -13,7 +13,10 @@ Your client opens Clerk's sign-in page. Approve, and you are done.
 
 ## Operator setup (once per instance)
 
-1. Supabase Dashboard: Settings: API: copy **JWT Secret** into `SUPABASE_JWT_SECRET`.
+1. Supabase Dashboard: Settings: JWT Keys: **Legacy JWT Secret** tab: copy the secret into `SUPABASE_JWT_SECRET`.
+   If your project has rotated to an asymmetric signing key, the legacy HS256 secret
+   shows under "Previously used keys". It still verifies tokens: leave it there and do
+   NOT revoke it, or every MCP call will be rejected by RLS.
 2. Clerk Dashboard: OAuth Applications: enable **Dynamic client registration**.
 3. Deploy. No migration.
 
