@@ -26,7 +26,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # undici@8 (a direct dependency) requires Node >= 22.19; Node 20
+          # fails every suite at import with "markAsUncloneable is not a function".
+          node-version: 22
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
