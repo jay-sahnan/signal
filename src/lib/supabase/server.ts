@@ -1,6 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { createServerClient } from "@supabase/ssr";
 
+import { getCurrentIdentity } from "@/lib/auth/identity";
+import { signSupabaseJwt } from "@/lib/auth/supabase-jwt";
 import { withTimeout } from "@/lib/utils/timeout";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -224,8 +226,15 @@ function isReplayable(
 
 export const createClient = async () => {
   warnIfKeyless();
-  const { getToken, sessionId } = await auth();
-  const freshToken = createTokenProvider(getToken, sessionId);
+  const injected = getCurrentIdentity();
+  const freshToken = injected
+    ? // Session-less caller: the app signs its own token. The provider still
+      // handles expiry so a long MCP tool call re-signs mid-flight.
+      createTokenProvider(() => signSupabaseJwt(injected.userId), null)
+    : await (async () => {
+        const { getToken, sessionId } = await auth();
+        return createTokenProvider(getToken, sessionId);
+      })();
 
   return createServerClient(supabaseUrl!, supabaseKey!, {
     // @supabase/ssr requires a cookies adapter even though Clerk-issued JWTs
@@ -263,6 +272,11 @@ export async function getSupabaseAndUser(): Promise<{
   supabase: Awaited<ReturnType<typeof createClient>>;
   user: { id: string; email: string };
 } | null> {
+  const injected = getCurrentIdentity();
+  if (injected) {
+    const supabase = await createClient();
+    return { supabase, user: { id: injected.userId, email: "" } };
+  }
   // `isAuthenticated` is the modern Clerk idiom (replaces `!!userId`). Keep
   // the `userId` null-check too so TypeScript narrows the return type.
   const { isAuthenticated, userId, sessionClaims } = await auth();

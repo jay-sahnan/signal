@@ -8,6 +8,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
+import { runWithIdentity } from "@/lib/auth/identity";
 import { trackUsage, withAction } from "@/lib/services/cost-tracker";
 
 /** trackUsage is fire-and-forget, so let its microtask run. */
@@ -81,5 +82,33 @@ describe("cost attribution", () => {
     await settle();
 
     expect(insertMock.mock.calls[0][0].user_id).toBeNull();
+  });
+
+  it("stamps metadata.source = mcp when running under an MCP identity", async () => {
+    await runWithIdentity({ userId: "user_mcp", source: "mcp" }, async () => {
+      trackUsage({
+        service: "exa",
+        operation: "search",
+        estimated_cost_usd: 0.01,
+      });
+      await settle();
+    });
+
+    expect(insertMock.mock.calls[0][0].metadata).toMatchObject({
+      source: "mcp",
+    });
+  });
+
+  it("stamps metadata.source = web outside any injected identity", async () => {
+    trackUsage({
+      service: "exa",
+      operation: "search",
+      estimated_cost_usd: 0.01,
+    });
+    await settle();
+
+    expect(insertMock.mock.calls[0][0].metadata).toMatchObject({
+      source: "web",
+    });
   });
 });

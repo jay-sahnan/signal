@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@clerk/nextjs/server";
+import { actingUserId } from "@/lib/auth/acting-user";
 import { createClient } from "@/lib/supabase/server";
 
 export const saveCampaign = tool({
@@ -63,7 +63,7 @@ export const saveCampaign = tool({
   }),
   execute: async (input) => {
     const supabase = await createClient();
-    const { userId } = await auth();
+    const userId = await actingUserId();
 
     if (input.id) {
       const updateData: Record<string, unknown> = { name: input.name };
