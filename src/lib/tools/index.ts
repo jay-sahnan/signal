@@ -1,4 +1,5 @@
 import { saveCampaign, getCampaign, listCampaigns } from "./campaign-tools";
+import { listChats, getChat } from "./chat-tools";
 import {
   searchCompanies,
   discoverCompanies,
@@ -98,6 +99,8 @@ import { getPostHogClient } from "@/lib/posthog-server";
 
 const rawTools = {
   openPage,
+  listChats,
+  getChat,
   saveCampaign,
   getCampaign,
   listCampaigns,

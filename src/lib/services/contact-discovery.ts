@@ -19,6 +19,7 @@ import {
   recordAffiliation,
   type AffiliationSource,
 } from "@/lib/services/affiliation";
+import { titleMatchesAny } from "@/lib/services/title-match";
 
 /**
  * The one path contacts are discovered through.
@@ -125,6 +126,8 @@ export interface ContactDiscoveryResult {
    * never landed.
    */
   affiliationUnchanged: number;
+  /** Team-page staff stored in the pool but not linked: titles outside the targets. */
+  teamPageUnlinked: number;
   error?: string;
 }
 
@@ -168,9 +171,23 @@ export async function findContactsForOrganization(
     campaignId?: string | null;
     titles: string[];
     numResults?: number;
+    /**
+     * Who from the company's own team page gets linked to the campaign.
+     * "matching" (default): only people whose title is in the family of a
+     * target title; everyone else is still stored in the shared pool with
+     * their team-page affiliation, just not attached to this campaign.
+     * "all": the old behaviour, link every listed person.
+     */
+    linkTeamPage?: "matching" | "all";
   },
 ): Promise<ContactDiscoveryResult> {
-  const { organizationId, campaignId, numResults = 5 } = args;
+  const {
+    organizationId,
+    campaignId,
+    numResults = 5,
+    linkTeamPage = "matching",
+  } = args;
+  let teamPageUnlinked = 0;
   // Bounded here rather than in the callers. Two of the three original copies
   // sliced to 5; the consolidation moved the logic but left the cost cap
   // behind, so find-more-people quietly went from 4 searches to 6 unbounded.
@@ -202,6 +219,7 @@ export async function findContactsForOrganization(
     rejectedAsWrongCompany: 0,
     departedCount: 0,
     affiliationUnchanged: 0,
+    teamPageUnlinked: 0,
     error,
   });
 
@@ -345,8 +363,20 @@ export async function findContactsForOrganization(
           });
         }
 
-        if (campaignId) await linkPersonToCampaign(person.id, campaignId);
         if (linkedinUrl) existingUrls.add(linkedinUrl);
+
+        // The page lists the whole company; the campaign asked for some
+        // roles. Everyone is kept in the pool with their affiliation (that
+        // evidence is the point of the scrape), but only role matches join
+        // the campaign, or a growth search fills it with the finance team.
+        const wanted =
+          linkTeamPage === "all" || titleMatchesAny(person.title, titles);
+        if (!wanted) {
+          teamPageUnlinked++;
+          continue;
+        }
+
+        if (campaignId) await linkPersonToCampaign(person.id, campaignId);
 
         if (write.written) verifiedCount++;
         else affiliationUnchanged++;
@@ -607,5 +637,6 @@ export async function findContactsForOrganization(
     rejectedAsWrongCompany,
     departedCount,
     affiliationUnchanged,
+    teamPageUnlinked,
   };
 }
