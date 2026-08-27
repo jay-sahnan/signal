@@ -2,6 +2,8 @@ import Exa from "exa-js";
 import { PRICING, trackUsage } from "@/lib/services/cost-tracker";
 import { withTimeout } from "@/lib/utils/timeout";
 
+import { exaCacheKey, readExaCache, writeExaCache } from "./exa-cache";
+
 export type SearchType = "neural" | "fast" | "auto" | "deep";
 export type SearchCategory =
   | "company"
@@ -34,9 +36,16 @@ export interface ExaSearchOptions {
   category?: SearchCategory;
   includeText?: boolean;
   includeDomains?: string[];
+  /** Skip the shared response cache (e.g. an explicit revalidate). */
+  bypassCache?: boolean;
 }
 
 const TIMEOUT_MS = 30_000;
+
+// Identical searches that overlap (a batch fanning out over the same
+// company) would each miss the cache and each pay Exa; share one promise
+// per key while it is in flight.
+const inFlight = new Map<string, Promise<ExaSearchResponse>>();
 
 // ── Concurrency limiter ────────────────────────────────────────────────────
 // Exa allows 10 QPS on search. Cap at 8 to leave headroom.
@@ -125,12 +134,38 @@ export class ExaService {
     query: string,
     options: ExaSearchOptions = {},
   ): Promise<ExaSearchResponse> {
-    await acquire();
-    try {
-      return await withRetry(() => this.executeSearch(query, options), query);
-    } finally {
-      release();
+    const key = exaCacheKey(query, options);
+    if (!options.bypassCache) {
+      const cached = await readExaCache(key);
+      if (cached) {
+        console.log(`[Exa] Cache hit for "${query}"`);
+        // A $0 row so the hit rate shows up next to the paid searches.
+        trackUsage({
+          service: "exa",
+          operation: "search-cache-hit",
+          estimated_cost_usd: 0,
+          metadata: { query, resultCount: cached.resultCount },
+        });
+        return cached;
+      }
     }
+    const pending = inFlight.get(key);
+    if (pending) return pending;
+    const run = (async () => {
+      await acquire();
+      try {
+        const response = await withRetry(
+          () => this.executeSearch(query, options),
+          query,
+        );
+        await writeExaCache(key, query, options, response);
+        return response;
+      } finally {
+        release();
+      }
+    })().finally(() => inFlight.delete(key));
+    inFlight.set(key, run);
+    return run;
   }
 
   private async executeSearch(

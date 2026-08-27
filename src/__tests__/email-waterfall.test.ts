@@ -116,11 +116,15 @@ vi.mock("@/lib/services/email-pattern", async () => {
 
 // Exa contributes nothing unless a test says otherwise.
 const exaResults = { results: [] as Array<{ text?: string }> };
+const exaSearch = vi.fn<
+  (
+    query: string,
+    options?: Record<string, unknown>,
+  ) => Promise<typeof exaResults>
+>(async () => exaResults);
 vi.mock("@/lib/services/exa-service", () => ({
   ExaService: class {
-    async search() {
-      return exaResults;
-    }
+    search = exaSearch;
   },
 }));
 
@@ -198,6 +202,7 @@ const row = () => state.people[0];
 beforeEach(() => {
   providerEnabled = true;
   exaResults.results = [];
+  exaSearch.mockClear();
   tableErrors = {};
   recordAffiliationMock.mockClear();
   provider.findEmail.mockReset().mockResolvedValue(null);
@@ -509,5 +514,44 @@ describe("recordNegatives freshness", () => {
     expect(data.rejectedEmails).toEqual(["j.doe@acme.com"]);
     // The concurrent write survived the negatives merge.
     expect(data.linkedin).toEqual({ posts: [] });
+  });
+});
+
+// ─── Exa is the last free tier, not the first ─────────────────────────────
+
+describe("findEmailForPerson Exa gating", () => {
+  it("skips the paid Exa search when the org has a confident pattern", async () => {
+    seed(
+      {},
+      { email_pattern: "{first}.{last}", email_pattern_confidence: 0.9 },
+    );
+    const res = await findEmailForPerson("p1", {});
+    expect(res.email).toBe("jane.doe@acme.com");
+    expect(exaSearch).not.toHaveBeenCalled();
+  });
+
+  it("still searches Exa when the pattern cannot render for a single-token name", async () => {
+    seed(
+      { name: "Madonna" },
+      { email_pattern: "{first}.{last}", email_pattern_confidence: 0.9 },
+    );
+    await findEmailForPerson("p1", {});
+    expect(exaSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it("still searches Exa when no pattern is known", async () => {
+    await findEmailForPerson("p1", {});
+    expect(exaSearch).toHaveBeenCalledTimes(1);
+    expect(exaSearch.mock.calls[0][1]).toMatchObject({ bypassCache: false });
+  });
+
+  it("searches Exa (cache bypassed) on revalidate even with a pattern", async () => {
+    seed(
+      {},
+      { email_pattern: "{first}.{last}", email_pattern_confidence: 0.9 },
+    );
+    await findEmailForPerson("p1", { revalidate: true });
+    expect(exaSearch).toHaveBeenCalledTimes(1);
+    expect(exaSearch.mock.calls[0][1]).toMatchObject({ bypassCache: true });
   });
 });
