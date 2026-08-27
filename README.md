@@ -89,6 +89,8 @@ pnpm dev             # http://localhost:3000
 
 Prefer to configure by hand? Follow [`docs/setup.md`](./docs/setup.md).
 
+Use Signal from Claude Code or Codex over MCP: see [`docs/mcp.md`](./docs/mcp.md).
+
 <br />
 
 ## 🐳 Self-host with Docker

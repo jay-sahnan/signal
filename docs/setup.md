@@ -98,6 +98,8 @@ Signal uses [Clerk](https://clerk.com) for sign-in/sign-up. Free tier covers 10k
 
 **Keyless mode** (skip Clerk setup for now): leave the three env vars blank. Clerk auto-creates an ephemeral dev application on first dev-server load. Sign-in works, but RLS-protected reads return empty rows because Supabase can't validate the Clerk JWT yet — you'll see an amber banner in the app explaining how to fix it. Useful for "just kicking the tires."
 
+Want to drive Signal from Claude Code or Codex? See [docs/mcp.md](./mcp.md) for the MCP endpoint setup (one extra env var: `SUPABASE_JWT_SECRET`).
+
 ## 5. Anthropic key
 
 Get a key at [console.anthropic.com](https://console.anthropic.com) and paste into `.env.local`:

@@ -170,6 +170,10 @@ async function promptRequired() {
   const supaService = await ask("Supabase service_role key (secret)", {
     secret: true,
   });
+  const supaJwtSecret = await ask(
+    "Supabase JWT secret (Dashboard: Settings: API; only needed for the MCP endpoint, blank to skip)",
+    { secret: true },
+  );
   const anthropic = await ask("Anthropic API key (sk-ant-api...)", {
     secret: true,
   });
@@ -183,6 +187,7 @@ async function promptRequired() {
   );
   content = setEnvKey(content, "SUPABASE_ANON_KEY", supaPub);
   content = setEnvKey(content, "SUPABASE_SERVICE_ROLE_KEY", supaService);
+  content = setEnvKey(content, "SUPABASE_JWT_SECRET", supaJwtSecret);
   content = setEnvKey(content, "ANTHROPIC_API_KEY", anthropic);
 
   writeEnvLocal(content);
@@ -469,6 +474,7 @@ async function writeLocalSupabaseKeys() {
   const apiUrl = pick("API_URL");
   const anonKey = pick("ANON_KEY");
   const serviceRoleKey = pick("SERVICE_ROLE_KEY");
+  const jwtSecret = pick("JWT_SECRET");
 
   if (!apiUrl || !anonKey || !serviceRoleKey) {
     log.warn(
@@ -487,6 +493,7 @@ async function writeLocalSupabaseKeys() {
   );
   content = setEnvKey(content, "SUPABASE_ANON_KEY", anonKey);
   content = setEnvKey(content, "SUPABASE_SERVICE_ROLE_KEY", serviceRoleKey);
+  content = setEnvKey(content, "SUPABASE_JWT_SECRET", jwtSecret);
   writeEnvLocal(content);
   log.ok("Wrote local Supabase URL/keys into .env.local.");
 }
