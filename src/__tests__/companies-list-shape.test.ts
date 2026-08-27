@@ -24,7 +24,11 @@ const fakeRows = [
   },
 ];
 
-const mockOrder = vi.fn().mockResolvedValue({ data: fakeRows, error: null });
+const mockRange = vi
+  .fn()
+  .mockResolvedValue({ data: fakeRows, error: null, count: fakeRows.length });
+const mockOrderTiebreak = vi.fn(() => ({ range: mockRange }));
+const mockOrder = vi.fn(() => ({ order: mockOrderTiebreak }));
 const mockEq = vi.fn(() => ({ order: mockOrder }));
 const mockSelect = vi.fn(() => ({ eq: mockEq }));
 const mockFrom = vi.fn((_table?: string) => ({ select: mockSelect }));
@@ -54,5 +58,56 @@ describe("getCompanies return shape", () => {
       domain: "acme.com",
       relevance_score: 9,
     });
+  });
+
+  it("selects named columns only, never organizations(*)", async () => {
+    await getCompanies.execute!({ campaignId: "c1" }, {} as never);
+    const selectArg = String((mockSelect.mock.calls.at(-1) as unknown[])[0]);
+    expect(selectArg).not.toContain("*");
+    expect(selectArg).not.toContain("enrichment_data");
+  });
+
+  it("orders by id after relevance so pages never drift on ties", async () => {
+    await getCompanies.execute!({ campaignId: "c1" }, {} as never);
+    expect(mockOrder).toHaveBeenLastCalledWith("relevance_score", {
+      ascending: false,
+    });
+    expect(mockOrderTiebreak).toHaveBeenLastCalledWith("id", {
+      ascending: true,
+    });
+  });
+
+  it("pages with limit/offset and reports total + hasMore", async () => {
+    mockRange.mockResolvedValueOnce({ data: fakeRows, error: null, count: 7 });
+    const result = (await getCompanies.execute!(
+      { campaignId: "c1", limit: 1, offset: 2 },
+      {} as never,
+    )) as { total: number; limit: number; offset: number; hasMore: boolean };
+    expect(mockRange).toHaveBeenLastCalledWith(2, 2);
+    expect(result).toMatchObject({
+      total: 7,
+      limit: 1,
+      offset: 2,
+      hasMore: true,
+    });
+  });
+
+  it("clips long descriptions in list rows", async () => {
+    const long = "x".repeat(1000);
+    mockRange.mockResolvedValueOnce({
+      data: [
+        {
+          ...fakeRows[0],
+          organization: { ...fakeRows[0].organization, description: long },
+        },
+      ],
+      error: null,
+      count: 1,
+    });
+    const result = (await getCompanies.execute!(
+      { campaignId: "c1" },
+      {} as never,
+    )) as { companies: Array<{ description: string }> };
+    expect(result.companies[0].description.length).toBeLessThan(300);
   });
 });

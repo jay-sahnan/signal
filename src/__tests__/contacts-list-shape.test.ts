@@ -27,7 +27,8 @@ const fakeRows = [
   },
 ];
 
-const mockOrder2 = vi.fn().mockResolvedValue({ data: fakeRows, error: null });
+const mockOrder3 = vi.fn().mockResolvedValue({ data: fakeRows, error: null });
+const mockOrder2 = vi.fn(() => ({ order: mockOrder3 }));
 const mockOrder1 = vi.fn(() => ({ order: mockOrder2 }));
 const mockEq = vi.fn(() => ({ order: mockOrder1 }));
 const mockSelect = vi.fn(() => ({ eq: mockEq }));
