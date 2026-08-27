@@ -223,7 +223,10 @@ export const getCompanies = tool({
         { count: "exact" },
       )
       .eq("campaign_id", input.campaignId)
-      .order("relevance_score", { ascending: false });
+      .order("relevance_score", { ascending: false })
+      // Ties on score would otherwise drift between pages; id makes the
+      // order total so range() never repeats or skips a row.
+      .order("id", { ascending: true });
 
     if (input.status) {
       query = query.eq("status", input.status);

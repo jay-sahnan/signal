@@ -1950,7 +1950,9 @@ export const getContacts = tool({
       )
       .eq("campaign_id", input.campaignId)
       .order("priority_score", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      // Each page is its own fetch; a total order keeps pages consistent.
+      .order("id", { ascending: true });
 
     const { data, error } = await query;
 
