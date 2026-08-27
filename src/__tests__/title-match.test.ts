@@ -56,3 +56,16 @@ describe("titleMatchesAny", () => {
     expect(titleMatchesAny("", targets)).toBe(false);
   });
 });
+
+describe("titleMatchesAny inflection", () => {
+  it("pairs inflections but never mere prefixes", () => {
+    expect(titleMatchesAny("Marketing Manager", ["Head of Market"])).toBe(true);
+    expect(titleMatchesAny("Sales Development Rep", ["VP Sales"])).toBe(true);
+    expect(titleMatchesAny("Production Manager", ["Head of Product"])).toBe(
+      false,
+    );
+    expect(titleMatchesAny("Product Manager", ["Head of Production"])).toBe(
+      false,
+    );
+  });
+});
