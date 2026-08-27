@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { mcpToolList, toMcpResult } from "@/lib/mcp/registry";
+import {
+  MCP_RESULT_MAX_CHARS,
+  mcpToolList,
+  toMcpResult,
+} from "@/lib/mcp/registry";
 
 describe("mcp registry", () => {
   it("exposes every agent tool except the UI-only exclusions", () => {
@@ -21,12 +25,20 @@ describe("mcp registry", () => {
     }
   });
 
-  it("serialises results as a single JSON text block", () => {
+  it("serialises results as a single compact JSON text block", () => {
     expect(toMcpResult({ ok: 1 })).toEqual({
-      content: [{ type: "text", text: JSON.stringify({ ok: 1 }, null, 2) }],
+      content: [{ type: "text", text: '{"ok":1}' }],
     });
     expect(toMcpResult("plain")).toEqual({
       content: [{ type: "text", text: "plain" }],
     });
+  });
+
+  it("truncates oversized results with a paging hint", () => {
+    const big = { rows: "y".repeat(MCP_RESULT_MAX_CHARS + 500) };
+    const { text } = toMcpResult(big).content[0];
+    expect(text.length).toBeLessThan(MCP_RESULT_MAX_CHARS + 300);
+    expect(text).toContain("Result truncated");
+    expect(text).toContain("limit/offset");
   });
 });

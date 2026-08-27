@@ -35,6 +35,16 @@ import {
 } from "@/lib/prompt-safety";
 
 /** Parallel website lookups per batch. One paid lookup each, so keep it low. */
+/** Paging defaults for the list tools; shared with getContacts. */
+export const LIST_DEFAULT_LIMIT = 50;
+export const LIST_MAX_LIMIT = 200;
+/** Long free text is clipped in list rows; the detail tools return it whole. */
+export const LIST_TEXT_CLIP = 240;
+export function clipText(value: unknown): unknown {
+  if (typeof value !== "string" || value.length <= LIST_TEXT_CLIP) return value;
+  return value.slice(0, LIST_TEXT_CLIP - 1) + "\u2026";
+}
+
 const DOMAIN_RESOLVE_CONCURRENCY = 4;
 
 export const searchCompanies = tool({
@@ -175,20 +185,43 @@ export const searchCompanies = tool({
 
 export const getCompanies = tool({
   description:
-    "Fetch stored companies for a campaign, with optional filtering by status. Returns a THIN list (no enrichment_data) so context stays small. For deep detail on one company, call getCompanyDetail(organizationId).",
+    "Fetch stored companies for a campaign, best relevance first, with optional status filter. Paginated: default 50 rows, pass offset for the next page (hasMore tells you). Thin rows only (no enrichment_data); for deep detail on one company call getCompanyDetail(organizationId).",
   inputSchema: z.object({
     campaignId: z.string().uuid().describe("Campaign ID"),
     status: z
       .enum(["discovered", "qualified", "disqualified"])
       .optional()
       .describe("Filter by company status"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(LIST_MAX_LIMIT)
+      .optional()
+      .describe(
+        `Rows per page, default ${LIST_DEFAULT_LIMIT}, max ${LIST_MAX_LIMIT}.`,
+      ),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("Rows to skip (for paging). Default 0."),
   }),
   execute: async (input) => {
     const supabase = await createClient();
+    const limit = input.limit ?? LIST_DEFAULT_LIMIT;
+    const offset = input.offset ?? 0;
 
+    // Name the columns: `organizations(*)` used to pull every row's
+    // enrichment_data blob out of Postgres only for the flatten below to
+    // drop it, which made a 145-company campaign a multi-megabyte read.
     let query = supabase
       .from("campaign_organizations")
-      .select("*, organization:organizations(*)")
+      .select(
+        "id, organization_id, campaign_id, relevance_score, score_reason, status, created_at, updated_at, organization:organizations(name, domain, url, industry, location, description, enrichment_status, source)",
+        { count: "exact" },
+      )
       .eq("campaign_id", input.campaignId)
       .order("relevance_score", { ascending: false });
 
@@ -196,13 +229,16 @@ export const getCompanies = tool({
       query = query.eq("status", input.status);
     }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query.range(
+      offset,
+      offset + limit - 1,
+    );
 
     if (error) throw new Error(`Failed to get companies: ${error.message}`);
 
     // Flatten for backwards compat with agent expectations
     const companies = (data || []).map((row) => {
-      const org = row.organization as Record<string, unknown>;
+      const org = row.organization as unknown as Record<string, unknown>;
       return {
         id: row.id,
         organization_id: row.organization_id,
@@ -212,10 +248,10 @@ export const getCompanies = tool({
         url: org.url,
         industry: org.industry,
         location: org.location,
-        description: org.description,
+        description: clipText(org.description),
         enrichment_status: org.enrichment_status,
         relevance_score: row.relevance_score,
-        score_reason: row.score_reason,
+        score_reason: clipText(row.score_reason),
         status: row.status,
         source: org.source,
         created_at: row.created_at,
@@ -223,7 +259,14 @@ export const getCompanies = tool({
       };
     });
 
-    return { companies };
+    const total = count ?? offset + companies.length;
+    return {
+      companies,
+      total,
+      limit,
+      offset,
+      hasMore: offset + companies.length < total,
+    };
   },
 });
 

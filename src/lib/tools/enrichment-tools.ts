@@ -50,6 +50,7 @@ import {
 } from "@/lib/services/hiring-scraper";
 import type { CompanyClaim } from "@/lib/types/claims";
 import { withTimeout } from "@/lib/utils/timeout";
+import { clipText, LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "./search-tools";
 
 /** Ceiling for one company's full enrichment chain. */
 const PER_COMPANY_TIMEOUT_MS = 150_000;
@@ -1909,7 +1910,7 @@ export const findContacts = tool({
 
 export const getContacts = tool({
   description:
-    "Fetch stored contacts for a campaign with optional filtering. Returns a THIN list (no enrichment_data) so context stays small. For deep detail on one contact (bio, Twitter, etc.), call getContactDetail(personId).",
+    "Fetch stored contacts for a campaign, highest priority first, with optional filters. Paginated: default 50 rows, pass offset for the next page (hasMore tells you). Thin rows only (no enrichment_data); for deep detail on one contact call getContactDetail(personId).",
   inputSchema: z.object({
     campaignId: z.string().uuid().describe("Campaign ID"),
     enrichmentStatus: z
@@ -1921,9 +1922,26 @@ export const getContacts = tool({
       .uuid()
       .optional()
       .describe("Filter by campaign-organization link ID"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(LIST_MAX_LIMIT)
+      .optional()
+      .describe(
+        `Rows per page, default ${LIST_DEFAULT_LIMIT}, max ${LIST_MAX_LIMIT}.`,
+      ),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("Rows to skip (for paging). Default 0."),
   }),
   execute: async (input) => {
     const supabase = await createClient();
+    const limit = input.limit ?? LIST_DEFAULT_LIMIT;
+    const offset = input.offset ?? 0;
 
     const query = supabase
       .from("campaign_people")
@@ -1982,6 +2000,11 @@ export const getContacts = tool({
       );
     }
 
+    // Filters above run in memory (they live on the joined person row), so
+    // page after filtering; the select is already thin.
+    const total = results.length;
+    results = results.slice(offset, offset + limit);
+
     // Flatten for backwards compat
     const contacts = results.map((row) => {
       const person = row.person as unknown as Record<string, unknown>;
@@ -1998,7 +2021,7 @@ export const getContacts = tool({
         enrichment_status: person.enrichment_status,
         outreach_status: row.outreach_status,
         priority_score: row.priority_score,
-        score_reason: row.score_reason,
+        score_reason: clipText(row.score_reason),
         source: person.source,
         company: person.organization || null,
         created_at: row.created_at,
@@ -2006,7 +2029,13 @@ export const getContacts = tool({
       };
     });
 
-    return { contacts };
+    return {
+      contacts,
+      total,
+      limit,
+      offset,
+      hasMore: offset + contacts.length < total,
+    };
   },
 });
 

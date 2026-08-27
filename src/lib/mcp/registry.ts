@@ -39,12 +39,25 @@ export function mcpToolList(): McpTool[] {
     });
 }
 
+/**
+ * Largest result handed back to an MCP client, in characters. Past this the
+ * client would have to spill the payload to disk anyway; the note tells the
+ * model to page or narrow instead of retrying the same call.
+ */
+export const MCP_RESULT_MAX_CHARS = 100_000;
+
 export function toMcpResult(result: unknown): {
   content: Array<{ type: "text"; text: string }>;
 } {
-  const text =
-    typeof result === "string"
-      ? result
-      : JSON.stringify(result ?? null, null, 2);
+  // Compact JSON: indentation was a quarter of every payload for nothing.
+  let text =
+    typeof result === "string" ? result : JSON.stringify(result ?? null);
+  if (text.length > MCP_RESULT_MAX_CHARS) {
+    const full = text.length;
+    text =
+      text.slice(0, MCP_RESULT_MAX_CHARS) +
+      `\n\n[Result truncated: ${MCP_RESULT_MAX_CHARS} of ${full} characters shown. ` +
+      "Use limit/offset or a narrower filter and call again.]";
+  }
   return { content: [{ type: "text", text }] };
 }
