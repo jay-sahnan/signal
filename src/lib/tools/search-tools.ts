@@ -225,7 +225,9 @@ export const getCompanies = tool({
       .eq("campaign_id", input.campaignId)
       .order("relevance_score", { ascending: false })
       // Ties on score would otherwise drift between pages; id makes the
-      // order total so range() never repeats or skips a row.
+      // order total so range() never repeats or skips a row. Rescoring
+      // between pages can still move a row across the boundary; see the
+      // note on getContacts, same trade-off.
       .order("id", { ascending: true });
 
     if (input.status) {

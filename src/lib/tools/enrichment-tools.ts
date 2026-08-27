@@ -1952,6 +1952,10 @@ export const getContacts = tool({
       .order("priority_score", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
       // Each page is its own fetch; a total order keeps pages consistent.
+      // Offset paging still drifts if scores are rewritten between pages
+      // (a rescored row can cross the boundary). Accepted: the window is
+      // one agent turn and the cost is a repeated or skipped list row.
+      // Keyset paging would fix it at the price of a cursor in the API.
       .order("id", { ascending: true });
 
     const { data, error } = await query;
