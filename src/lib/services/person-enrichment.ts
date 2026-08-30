@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { normalizeCompanyName } from "@/lib/services/affiliation";
 import { withAction } from "@/lib/services/cost-tracker";
 import { ExaService } from "@/lib/services/exa-service";
 import { LinkedinService } from "@/lib/services/linkedin-service";
@@ -38,6 +39,63 @@ export interface PersonForEnrichment {
   organization_id?: string | null;
   organization: { name?: string } | null;
 }
+
+/** Lowercase alphanumerics only, so punctuation and spacing stop mattering. */
+function squash(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function nameTokens(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 2);
+}
+
+/**
+ * Is this search result actually about THIS person?
+ *
+ * An Exa query carries the name and company, but Exa is semantic: the top
+ * results routinely include namesake strangers whose pages never mention the
+ * employer. Stored unchecked, a stranger's "15 years at Oracle" lands in the
+ * contact's enrichment_data and the composer personalises outreach against
+ * someone else's life. So a result must name the person AND their company to
+ * be kept: a missing fact costs a blander email, a stranger's fact costs a
+ * wrong one sent to a real prospect.
+ *
+ * Requiring the company is also why callers skip web search entirely for
+ * people with no organization on file: with only a name there is nothing to
+ * tie a result to this specific human.
+ */
+export function resultIsAboutPerson(
+  result: { title: string | null; text: string | null },
+  person: { name: string; companyName: string | null },
+): boolean {
+  const haystack = squash(`${result.title ?? ""} ${result.text ?? ""}`);
+  if (!haystack) return false;
+
+  const tokens = nameTokens(person.name);
+  if (tokens.length === 0) return false;
+  if (!tokens.every((t) => haystack.includes(t))) return false;
+
+  if (person.companyName) {
+    const companyTokens = normalizeCompanyName(person.companyName)
+      .split(" ")
+      .filter((t) => t.length >= 2);
+    if (
+      companyTokens.length > 0 &&
+      !companyTokens.every((t) => haystack.includes(t))
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/** The note callers record when web search is skipped for lack of an anchor. */
+export const NO_COMPANY_SEARCH_NOTE =
+  "Web search skipped: no company on file, so results could not be tied to this specific person. LinkedIn and X profiles (if on file) were still used. Link the contact to their company and re-enrich to add news and articles.";
 
 export async function enrichPerson(
   supabase: SupabaseClient,
@@ -105,7 +163,14 @@ export async function enrichPerson(
         );
       }
 
-      if (contactName !== "Unknown") {
+      if (contactName !== "Unknown" && !companyName) {
+        // With only a name, nothing can tie a result to this specific human:
+        // running the searches anyway is how namesake strangers' articles
+        // ended up stored as facts about a contact.
+        errors.push(NO_COMPANY_SEARCH_NOTE);
+      }
+
+      if (contactName !== "Unknown" && companyName) {
         const exa = new ExaService();
 
         const contactTitle = person.title || null;
@@ -160,7 +225,14 @@ export async function enrichPerson(
             publishedDate: string | null;
             text: string | null;
           }>,
-        ) => results.filter((r) => !companyUrls.has(r.url));
+        ) =>
+          results
+            .filter((r) => !companyUrls.has(r.url))
+            // Identity gate: only results that name the person AND the
+            // company survive. See resultIsAboutPerson.
+            .filter((r) =>
+              resultIsAboutPerson(r, { name: contactName, companyName }),
+            );
 
         const search = (
           key: "news" | "articles" | "background",
