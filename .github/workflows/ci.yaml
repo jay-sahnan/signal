@@ -24,7 +24,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           # undici@8 (a direct dependency) requires Node >= 22.19; Node 20
           # fails every suite at import with "markAsUncloneable is not a function".
