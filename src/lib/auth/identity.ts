@@ -9,7 +9,10 @@ import { AsyncLocalStorage } from "node:async_hooks";
 export type Identity = {
   userId: string;
   /** Where the request came from, for cost and telemetry attribution. */
-  source: "mcp";
+  source: "mcp" | "web" | "job";
+  /** Trusted server-resolved context; never copied from tool arguments. */
+  workspaceId?: string;
+  operationId?: string;
 };
 
 const store = new AsyncLocalStorage<Identity>();
