@@ -421,15 +421,18 @@ export async function isRecentlyEnriched(
   table: "organizations" | "people",
   id: string,
   maxAgeDays: number = 7,
+  requireSuccessfulRead = false,
 ): Promise<boolean> {
   const supabase = await createClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from(table)
     .select("enrichment_data, last_enriched_at")
     .eq("id", id)
     .single();
 
+  if (error && requireSuccessfulRead)
+    throw new Error("Could not check enrichment freshness");
   if (!data) return false;
 
   // enrichment_data.enrichedAt is set by the *company* enrichment paths only.

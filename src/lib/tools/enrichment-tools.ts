@@ -547,6 +547,7 @@ async function enrichContactById(
   personId: string,
   linkedinUrl?: string,
   twitterUrl?: string,
+  operationKey?: string | null,
 ): Promise<{
   contactId: string;
   status: string;
@@ -604,16 +605,19 @@ async function enrichContactById(
   // there forever. Re-enriching is the recovery, so the recency skip must not
   // apply: it used to return status "enriched" while the row still said
   // in_progress, making the stuck state unfixable for 7 days.
-  const { data: statusRow } = await supabase
+  const { data: statusRow, error: statusError } = await supabase
     .from("people")
     .select("enrichment_status")
     .eq("id", personId)
     .maybeSingle();
+  if (isHostedMode() && statusError)
+    throw new Error("Could not read contact status");
   const stuckInProgress = statusRow?.enrichment_status === "in_progress";
 
   // Check recency -- skip if recently enriched
   const recent =
-    !stuckInProgress && (await isRecentlyEnriched("people", personId));
+    !stuckInProgress &&
+    (await isRecentlyEnriched("people", personId, 7, isHostedMode()));
   if (recent) {
     const { data: person } = await supabase
       .from("people")
@@ -630,7 +634,7 @@ async function enrichContactById(
     };
   }
 
-  const { data: person } = await supabase
+  const { data: person, error: personError } = await supabase
     .from("people")
     .select(
       // The !organization_id hint is load-bearing: people has a second FK to
@@ -641,12 +645,56 @@ async function enrichContactById(
     .eq("id", personId)
     .single();
 
+  if (isHostedMode() && (personError || !person))
+    throw new Error("Could not load contact for enrichment");
   const contactName = person?.name || "Unknown";
   const companyName =
     (person?.organization as unknown as { name?: string } | null)?.name || null;
   const linkedinFinal = linkedinUrl || person?.linkedin_url || undefined;
   const twitterFinal = twitterUrl || person?.twitter_url || undefined;
 
+  const research = () =>
+    researchContact(
+      supabase,
+      personId,
+      person,
+      contactName,
+      companyName,
+      linkedinFinal,
+      twitterFinal,
+    );
+  if (!isHostedMode()) return research();
+  return executePaidAction(
+    {
+      identity: getCurrentIdentity() ?? {
+        userId: session.userId,
+        source: "web",
+      },
+      key: operationKey ?? null,
+      kind: "contact.enrich",
+      request: {
+        personId,
+        linkedinUrl: linkedinUrl ?? null,
+        twitterUrl: twitterUrl ?? null,
+      },
+    },
+    research,
+  );
+}
+
+async function researchContact(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  personId: string,
+  person: {
+    title?: string | null;
+    location?: string | null;
+    organization_id?: string | null;
+  } | null,
+  contactName: string,
+  companyName: string | null,
+  linkedinFinal?: string,
+  twitterFinal?: string,
+) {
   await supabase
     .from("people")
     .update({ enrichment_status: "in_progress" })
@@ -821,6 +869,9 @@ async function enrichContactById(
     status as "enriched" | "failed",
   );
 
+  if (isHostedMode() && status === "failed")
+    throw new Error("All enrichment sources failed");
+
   // ── Bio summary ──────────────────────────────────────────────────────
   // Generate a short blurb from whatever we just collected so the user
   // gets a quick read at the top of the person drawer. Best-effort: a
@@ -929,8 +980,15 @@ async function enrichContactById(
 
 export const enrichContact = tool({
   description:
-    "Enrich a single contact and write results to the DB. Returns a THIN summary (counts of news/articles, has-linkedin flags) -- NOT the full enrichment payload. If you need to read the enriched content (e.g. to personalize an email), call getContactDetail(personId). For multiple contacts, use enrichContacts (parallel). Skips if recently enriched (<7 days).",
+    "Enrich a single contact and write results to the DB. Returns a THIN summary (counts of news/articles, has-linkedin flags) -- NOT the full enrichment payload. If you need to read the enriched content (e.g. to personalize an email), call getContactDetail(personId). For multiple contacts, use enrichContacts (parallel). Skips if recently enriched (<7 days). Hosted mode charges one contact.enrich action including email discovery, even for partial research; cached enrichment is free.",
   inputSchema: z.object({
+    operationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe(
+        "Hosted MCP: new UUID for new enrichment; reuse it on retries.",
+      ),
     contactId: z
       .string()
       .uuid()
@@ -950,14 +1008,30 @@ export const enrichContact = tool({
         "Twitter/X profile URL (if omitted, uses the one stored on the person)",
       ),
   }),
-  execute: async (input) =>
-    enrichContactById(input.contactId, input.linkedinUrl, input.twitterUrl),
+  execute: async (input, opts) =>
+    enrichContactById(
+      input.contactId,
+      input.linkedinUrl,
+      input.twitterUrl,
+      toolOperationKey(
+        getCurrentIdentity()?.source ?? "web",
+        input.operationId,
+        opts?.toolCallId,
+      ),
+    ),
 });
 
 export const enrichContacts = tool({
   description:
-    "Enrich multiple contacts IN PARALLEL. Much faster than calling enrichContact one by one. Skips any person recently enriched (within 7 days).",
+    "Enrich multiple contacts IN PARALLEL. Much faster than calling enrichContact one by one. Skips any person recently enriched (within 7 days). Hosted mode charges per researched contact, including email discovery and partial results; cached enrichment is free.",
   inputSchema: z.object({
+    operationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe(
+        "Hosted MCP: new UUID for new enrichment; reuse it on retries.",
+      ),
     contactIds: z
       .array(z.string().uuid())
       .min(1)
@@ -966,8 +1040,13 @@ export const enrichContacts = tool({
         "Array of person IDs (people.id, the person_id field on getContacts rows, NOT campaign-people link IDs). Max 10.",
       ),
   }),
-  execute: async (input, { experimental_context }) => {
-    const deadlineAt = deadlineFrom(experimental_context);
+  execute: async (input, opts) => {
+    const deadlineAt = deadlineFrom(opts?.experimental_context);
+    const batchKey = toolOperationKey(
+      getCurrentIdentity()?.source ?? "web",
+      input.operationId,
+      opts?.toolCallId,
+    );
     const succeeded: Array<{
       contactId: string;
       status: string;
@@ -990,7 +1069,16 @@ export const enrichContacts = tool({
       }
       const chunk = input.contactIds.slice(i, i + CHUNK_SIZE);
       const results = await Promise.allSettled(
-        chunk.map((id) => enrichContactById(id)),
+        chunk.map((id) =>
+          enrichContactById(
+            id,
+            undefined,
+            undefined,
+            batchKey
+              ? toolOperationKey("web", undefined, `${batchKey}:${id}`)
+              : null,
+          ),
+        ),
       );
 
       results.forEach((result, j) => {
