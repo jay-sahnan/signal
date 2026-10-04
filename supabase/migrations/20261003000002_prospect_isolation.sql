@@ -48,12 +48,15 @@ create trigger organizations_workspace_write before insert or update on public.o
 create trigger people_workspace_write before insert or update on public.people
   for each row execute function public.set_prospect_workspace();
 
+drop policy workspace_pending on public.organizations;
+drop policy workspace_pending on public.people;
+
 create policy organizations_workspace_boundary on public.organizations
   as restrictive for all to authenticated
-  using (not public.hosted_mode() or workspace_id = public.requesting_workspace_id())
-  with check (not public.hosted_mode() or workspace_id = public.requesting_workspace_id());
+  using ((not public.hosted_mode() and workspace_id is null) or (public.hosted_mode() and workspace_id = public.requesting_workspace_id()))
+  with check ((not public.hosted_mode() and workspace_id is null) or (public.hosted_mode() and workspace_id = public.requesting_workspace_id()));
 create policy people_workspace_boundary on public.people
   as restrictive for all to authenticated
-  using (not public.hosted_mode() or workspace_id = public.requesting_workspace_id())
-  with check (not public.hosted_mode() or workspace_id = public.requesting_workspace_id());
+  using ((not public.hosted_mode() and workspace_id is null) or (public.hosted_mode() and workspace_id = public.requesting_workspace_id()))
+  with check ((not public.hosted_mode() and workspace_id is null) or (public.hosted_mode() and workspace_id = public.requesting_workspace_id()));
 commit;
