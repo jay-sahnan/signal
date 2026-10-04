@@ -112,3 +112,29 @@ describe("cost attribution", () => {
     });
   });
 });
+
+it("attributes paid usage to trusted workspace and operation context", async () => {
+  await runWithIdentity(
+    {
+      userId: "trusted-user",
+      source: "job",
+      workspaceId: "workspace",
+      operationId: "operation",
+    },
+    async () => {
+      trackUsage({
+        service: "exa",
+        operation: "search",
+        estimated_cost_usd: 0.01,
+        user_id: "other",
+      });
+      await settle();
+    },
+  );
+  expect(insertMock.mock.calls[0][0]).toMatchObject({
+    user_id: "trusted-user",
+    workspace_id: "workspace",
+    credit_operation_id: "operation",
+    metadata: { source: "job" },
+  });
+});

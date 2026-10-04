@@ -1,3 +1,5 @@
+import { isHostedMode } from "@/lib/auth/workspace";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { fetchRealSpend } from "@/lib/services/real-spend";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 
@@ -6,7 +8,17 @@ export async function GET(request: Request) {
   if (!ctx) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase } = ctx;
+  const hosted = isHostedMode();
+  const operators = (process.env.SIGNAL_OPERATOR_USER_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (hosted && !operators.includes(ctx.user.id))
+    return Response.json(
+      { error: "Operator access required" },
+      { status: 403 },
+    );
+  const supabase = hosted ? getAdminClient() : ctx.supabase;
 
   const { searchParams } = new URL(request.url);
   const period = searchParams.get("period") || "30d";
