@@ -1,5 +1,9 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { executePaidAction } from "@/lib/billing/paid-action";
+import { toolOperationKey } from "@/lib/billing/tool-operation-key";
+import { getCurrentIdentity } from "@/lib/auth/identity";
+import { isHostedMode } from "@/lib/auth/workspace";
 import { actingUserId } from "@/lib/auth/acting-user";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -9,7 +13,11 @@ import {
   loadSenderFacts,
   type FactCategory,
 } from "@/lib/sender-facts";
-import { dedupeFacts, researchSender } from "@/lib/services/sender-research";
+import {
+  dedupeFacts,
+  hostOf,
+  researchSender,
+} from "@/lib/services/sender-research";
 import { createClient } from "@/lib/supabase/server";
 import type { UserProfile } from "@/lib/types/profile";
 
@@ -60,13 +68,20 @@ export const researchSenderProfile = tool({
   description:
     "Research the user's own profile URLs (LinkedIn, website, company, Twitter) and extract true facts about them into their sender fact bank -- career background, proof points, stories, opinions, credibility markers, personal interests. The fact bank is what the email drafter draws on: it picks at most 1-2 facts per recipient to make outreach personal and credible. Requires the profile to have at least one URL saved; if it has none, ask the user to add their LinkedIn or website first. Offer this after a profile is set up.",
   inputSchema: z.object({
+    operationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe(
+        "Hosted MCP: supply a new UUID for new paid research; reuse it exactly when retrying. A new UUID represents a new billable request.",
+      ),
     profileId: z
       .string()
       .uuid()
       .optional()
       .describe("Profile to research. Omit to use the most recent profile."),
   }),
-  execute: async (input) => {
+  execute: async (input, opts) => {
     const userId = await actingUserId();
     if (!userId) return { error: "Not authenticated." };
 
@@ -74,51 +89,87 @@ export const researchSenderProfile = tool({
     const profile = await resolveProfile(supabase, input.profileId);
     if (!profile) return { error: NO_PROFILE_ERROR };
 
-    const result = await researchSender(profile, userId);
-    if (!result.ok) return { error: result.error };
-
-    // Full-bank baseline, refused on error: an empty or truncated baseline
-    // re-inserts facts that already exist.
-    const existingRes = await loadAllSenderFacts(supabase, profile.id);
-    if (!existingRes.ok) {
-      return {
-        error: `Could not load the existing fact bank (${existingRes.error}), so nothing was saved: inserting without it would duplicate facts. Retry.`,
-      };
+    const identity = getCurrentIdentity() ?? { userId, source: "web" as const };
+    const urls = [
+      profile.linkedin_url,
+      profile.personal_url,
+      profile.company_url,
+      profile.twitter_url,
+    ];
+    if (isHostedMode()) {
+      if ((profile as UserProfile & { user_id?: string }).user_id !== userId)
+        return { error: NO_PROFILE_ERROR };
+      if (!urls.some((url) => url?.trim() && hostOf(url)))
+        return { error: "Add a usable profile URL before researching." };
     }
-    const survivors = dedupeFacts(result.facts, existingRes.facts);
-    const skippedAsDuplicates = result.facts.length - survivors.length;
+    return executePaidAction(
+      {
+        identity,
+        key: toolOperationKey(
+          identity.source,
+          input.operationId,
+          opts.toolCallId,
+        ),
+        kind: "profile.research",
+        request: {
+          profileId: profile.id,
+          name: profile.name ?? null,
+          companyName: profile.company_name ?? null,
+          urls: urls.map((url) => url ?? null),
+        },
+      },
+      async () => {
+        const result = await researchSender(profile, userId);
+        if (!result.ok) {
+          if (isHostedMode()) throw new Error(result.error);
+          return { error: result.error };
+        }
 
-    if (survivors.length === 0) {
-      return {
-        ok: true,
-        added: 0,
-        skippedAsDuplicates,
-        facts: [],
-        message: "Every researched fact was already in the bank.",
-      };
-    }
+        // Full-bank baseline, refused on error: an empty or truncated baseline
+        // re-inserts facts that already exist.
+        const existingRes = await loadAllSenderFacts(supabase, profile.id);
+        if (!existingRes.ok) {
+          if (isHostedMode()) throw new Error("Existing fact bank unavailable");
+          return {
+            error: `Could not load the existing fact bank (${existingRes.error}), so nothing was saved: inserting without it would duplicate facts. Retry.`,
+          };
+        }
+        const survivors = dedupeFacts(result.facts, existingRes.facts);
+        const skippedAsDuplicates = result.facts.length - survivors.length;
 
-    const { data: inserted, error } = await supabase
-      .from("sender_facts")
-      .insert(
-        survivors.map((f) => ({
-          user_id: userId,
-          profile_id: profile.id,
-          category: f.category,
-          fact: f.fact,
-          source: "research",
-        })),
-      )
-      .select("category, fact");
+        if (survivors.length === 0) {
+          return {
+            ok: true,
+            added: 0,
+            skippedAsDuplicates,
+            facts: [],
+            message: "Every researched fact was already in the bank.",
+          };
+        }
 
-    if (error) throw new Error(`Failed to save facts: ${error.message}`);
+        const { data: inserted, error } = await supabase
+          .from("sender_facts")
+          .insert(
+            survivors.map((f) => ({
+              user_id: userId,
+              profile_id: profile.id,
+              category: f.category,
+              fact: f.fact,
+              source: "research",
+            })),
+          )
+          .select("category, fact");
 
-    return {
-      ok: true,
-      added: inserted?.length ?? survivors.length,
-      skippedAsDuplicates,
-      facts: groupFactsByCategory(inserted ?? survivors),
-    };
+        if (error) throw new Error(`Failed to save facts: ${error.message}`);
+
+        return {
+          ok: true,
+          added: inserted?.length ?? survivors.length,
+          skippedAsDuplicates,
+          facts: groupFactsByCategory(inserted ?? survivors),
+        };
+      },
+    );
   },
 });
 
