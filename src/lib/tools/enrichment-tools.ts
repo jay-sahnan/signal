@@ -612,7 +612,8 @@ async function enrichContactById(
     .maybeSingle();
   if (isHostedMode() && statusError)
     throw new Error("Could not read contact status");
-  const stuckInProgress = statusRow?.enrichment_status === "in_progress";
+  // Failed refreshes also retain old timestamps; they need work, not a success label.
+  const needsRetry = ["in_progress", "failed"].includes(statusRow?.enrichment_status ?? "");
 
   const paidInput = {
     identity: getCurrentIdentity() ?? { userId: session.userId, source: "web" as const },
@@ -623,7 +624,7 @@ async function enrichContactById(
 
   // New cache reads are free; existing operations must replay through billing.
   const recent =
-    !stuckInProgress &&
+    !needsRetry &&
     (await isRecentlyEnriched("people", personId, 7, isHostedMode()));
   if (recent && (!isHostedMode() || !(await hasPaidAction(paidInput)))) {
     const { data: person } = await supabase

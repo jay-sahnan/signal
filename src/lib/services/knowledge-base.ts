@@ -427,13 +427,16 @@ export async function isRecentlyEnriched(
 
   const { data, error } = await supabase
     .from(table)
-    .select("enrichment_data, last_enriched_at")
+    .select("enrichment_data, last_enriched_at, enrichment_status")
     .eq("id", id)
     .single();
 
   if (error && requireSuccessfulRead)
     throw new Error("Could not check enrichment freshness");
   if (!data) return false;
+  // A failed or unfinished refresh may retain a previous successful timestamp.
+  if (table === "people" && ["failed", "in_progress"].includes(data.enrichment_status))
+    return false;
 
   // enrichment_data.enrichedAt is set by the *company* enrichment paths only.
   // Contact enrichment never wrote it, so this returned false for every person

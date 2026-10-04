@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   search: vi.fn(),
   email: vi.fn(),
   hosted: true,
+  status: "pending",
   updates: [] as unknown[],
 }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
@@ -39,7 +40,7 @@ vi.mock("@/lib/supabase/server", () => ({
           {
             id: "person",
             name: "Ada",
-            enrichment_status: "pending",
+            enrichment_status: h.status,
             affiliation_confidence: 1,
           },
         ],
@@ -64,6 +65,7 @@ const call = () =>
 beforeEach(() => {
   vi.clearAllMocks();
   h.hosted = true;
+  h.status = "pending";
   h.existing.mockResolvedValue(false);
   h.updates = [];
   h.holds.mockResolvedValue(true);
@@ -172,4 +174,11 @@ it("cannot hide unresolved credit operations behind fresh contact data", async (
   h.existing.mockResolvedValue(true);
   h.paid.mockRejectedValue(new Error("Unresolved"));
   await expect(call()).rejects.toThrow("Unresolved");
+});
+
+it("does not label a failed contact enriched because its older timestamp is recent", async () => {
+  h.status = "failed";
+  h.recent.mockResolvedValue(true);
+  await call();
+  expect(h.paid).toHaveBeenCalledTimes(1);
 });
