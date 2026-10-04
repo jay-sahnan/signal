@@ -127,3 +127,14 @@ describe("<EnrichAllButton>", () => {
     expect(screen.getByText("Enrich 1 contact?")).toBeInTheDocument();
   });
 });
+
+it("reports terminal failures and allows a corrected batch without retaining its old selection", async () => {
+  fetchMock.mockResolvedValue(ok({ enriched: 0, failed: 1, summary: "Add a name or social URL." }));
+  const { onDone } = renderButton(1);
+  fireEvent.click(screen.getByRole("button", { name: /Enrich all/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Enrich 1" }));
+  await waitFor(() => expect(onDone).toHaveBeenCalled());
+  expect(toastError).toHaveBeenCalledWith("Add a name or social URL.");
+  expect(toastSuccess).not.toHaveBeenCalled();
+  expect(sessionStorage.length).toBe(0);
+});
