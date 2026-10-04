@@ -44,7 +44,7 @@ vi.mock("exa-js", () => ({
     async search() {
       h.exaCalls++;
       return {
-        results: [{ title: "T", url: "https://x" }],
+        results: [{ title: `Response ${h.exaCalls}`, url: "https://x" }],
         searchType: "auto",
       };
     }
@@ -149,10 +149,11 @@ describe("hosted Exa cache isolation", () => {
       runWithIdentity({ userId: workspaceId, workspaceId, source: "web" }, () =>
         exa.search("same customer research", {}),
       );
-    await Promise.all([search("a"), search("b")]);
+    const [a, b] = await Promise.all([search("a"), search("b")]);
+    expect(a.results).not.toEqual(b.results);
     expect(h.exaCalls).toBe(2);
-    await search("a");
-    await search("b");
+    expect(await search("a")).toEqual(a);
+    expect(await search("b")).toEqual(b);
     expect(h.exaCalls).toBe(2);
     expect(h.rows.size).toBe(2);
     vi.unstubAllEnvs();
