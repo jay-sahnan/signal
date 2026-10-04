@@ -43,11 +43,29 @@ export async function fulfillCreditSession(
   const order = data as CreditOrder;
   if (
     (workspaceId && order.workspace_id !== workspaceId) ||
+    (order.session_id && order.session_id !== session.id) ||
     session.mode !== "payment" ||
     idOf(session.customer) !== order.customer_id
   )
     throw new Error("Checkout does not match credit order");
-  if (session.payment_status !== "paid") return "pending";
+  if (session.payment_status !== "paid") {
+    const intent = session.payment_intent;
+    const failed =
+      session.status === "complete" &&
+      intent &&
+      typeof intent !== "string" &&
+      ["canceled", "requires_payment_method"].includes(intent.status);
+    const state =
+      session.status === "expired" ? "expired" : failed ? "failed" : null;
+    if (!state) return "pending";
+    const closed = await db.rpc("close_credit_order", {
+      p_order: order.id,
+      p_session: session.id,
+      p_state: state,
+    });
+    if (closed.error) throw new Error("Cannot close unpaid checkout; retry");
+    return state;
+  }
   const line = session.line_items?.data[0];
   const payment = session.payment_intent;
   if (

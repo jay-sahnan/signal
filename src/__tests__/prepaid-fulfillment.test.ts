@@ -31,6 +31,7 @@ const orderId = "11111111-1111-4111-8111-111111111111";
 function paidSession() {
   return {
     id: "cs_paid",
+    status: "complete",
     client_reference_id: orderId,
     mode: "payment",
     customer: "cus_owner",
@@ -132,4 +133,35 @@ it("propagates a failed grant so webhook delivery remains retryable", async () =
     error: { message: "unavailable" },
   });
   await expect(fulfillCreditSession("cs_paid")).rejects.toThrow();
+});
+
+it.each(["expired", "failed"])(
+  "closes a freshly verified unpaid %s checkout without granting",
+  async (state) => {
+    const session = paidSession();
+    session.payment_status = "unpaid";
+    session.status = state === "expired" ? "expired" : "complete";
+    session.payment_intent.status =
+      state === "expired" ? "canceled" : "requires_payment_method";
+    session.payment_intent.latest_charge.paid = false;
+    h.retrieve.mockResolvedValue(session);
+    expect(await fulfillCreditSession("cs_paid")).toBe(state);
+    expect(h.fulfill).toHaveBeenCalledWith("close_credit_order", {
+      p_order: orderId,
+      p_session: "cs_paid",
+      p_state: state,
+    });
+    expect(h.fulfill).not.toHaveBeenCalledWith(
+      "fulfill_credit_order",
+      expect.anything(),
+    );
+  },
+);
+it("does not close a still-processing delayed payment", async () => {
+  const session = paidSession();
+  session.payment_status = "unpaid";
+  session.payment_intent.status = "processing";
+  h.retrieve.mockResolvedValue(session);
+  expect(await fulfillCreditSession("cs_paid")).toBe("pending");
+  expect(h.fulfill).not.toHaveBeenCalled();
 });

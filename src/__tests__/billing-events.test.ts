@@ -120,3 +120,11 @@ it("still rejects a customerless checkout referencing a known order", async () =
   Object.assign(invalid.data.object, { customer: null });
   await expect(processBillingEvent(invalid)).rejects.toThrow("does not match");
 });
+
+it.each(["checkout.session.expired", "checkout.session.async_payment_failed"])(
+  "verifies current session state before handling %s",
+  async (type) => {
+    await processBillingEvent(event(type));
+    expect(h.fulfill).toHaveBeenCalledWith("cs_test");
+  },
+);
