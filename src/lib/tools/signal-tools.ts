@@ -140,7 +140,9 @@ export const testSignalRecipe = tool({
         .from("signals")
         .select("*")
         .eq("slug", input.recipeSlug)
-        .single();
+        .order("is_builtin", { ascending: false })
+        .limit(1)
+        .maybeSingle();
       signal = data as Signal | null;
     }
 

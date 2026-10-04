@@ -3,7 +3,7 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import { ExaService } from "@/lib/services/exa-service";
 import { structuralDiff } from "./diff";
 import { runRecipe } from "./runner";
-import { getRecipe } from "./recipes";
+import { builtinRecipe } from "./recipes";
 import type { Signal } from "@/lib/types/signal";
 import type { SignalOutput, RecipeContext } from "./types";
 
@@ -266,9 +266,8 @@ async function executeBrowserScript(
   signal: Signal,
   ctx: ExecuteSignalContext,
 ): Promise<SignalOutput> {
-  // Check if there's a hardcoded recipe for this signal
-  try {
-    const recipe = getRecipe(signal.slug);
+  const recipe = builtinRecipe(signal);
+  if (recipe) {
     // Has a recipe -- use the recipe runner
     const recipeContext: RecipeContext = {
       signalId: signal.id,
@@ -291,12 +290,10 @@ async function executeBrowserScript(
       supabaseClient: ctx.useAdmin ? getAdminClient() : undefined,
     });
     return output;
-  } catch {
-    // No hardcoded recipe -- fall through
   }
 
   // Check for hiring-activity special case
-  if (signal.slug === "hiring-activity") {
+  if (signal.is_builtin && signal.slug === "hiring-activity") {
     return executeHiringActivity(ctx);
   }
 

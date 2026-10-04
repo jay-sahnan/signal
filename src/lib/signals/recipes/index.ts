@@ -33,7 +33,7 @@ export function getRecipe(slug: RecipeSlug): SignalRecipe;
 export function getRecipe(slug: string): SignalRecipe;
 export function getRecipe(slug: string): SignalRecipe {
   const recipe = (RECIPES as Record<string, SignalRecipe>)[slug];
-  if (!recipe) {
+  if (!Object.hasOwn(RECIPES, slug)) {
     const known = Object.keys(RECIPES).join(", ") || "(none registered)";
     throw new Error(
       `No recipe registered with slug "${slug}". Known slugs: ${known}.`,
@@ -43,9 +43,19 @@ export function getRecipe(slug: string): SignalRecipe {
 }
 
 export function hasRecipe(slug: string): slug is RecipeSlug {
-  return slug in RECIPES;
+  return Object.hasOwn(RECIPES, slug);
 }
 
 export function listRecipeSlugs(): RecipeSlug[] {
   return Object.keys(RECIPES) as RecipeSlug[];
+}
+
+/** Only platform-owned signals may dispatch executable built-in recipes. */
+export function builtinRecipe(signal: {
+  slug: string;
+  is_builtin: boolean;
+}): SignalRecipe | null {
+  return signal.is_builtin && hasRecipe(signal.slug)
+    ? getRecipe(signal.slug)
+    : null;
 }

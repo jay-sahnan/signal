@@ -2412,6 +2412,7 @@ export const getGoogleReviews = tool({
         .from("signals")
         .select("id")
         .eq("slug", "google-reviews")
+        .eq("is_builtin", true)
         .maybeSingle();
 
       if (signalError) {
