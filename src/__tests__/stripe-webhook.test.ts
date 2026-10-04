@@ -43,3 +43,20 @@ it("returns retryable failure if durable processing fails", async () => {
   h.process.mockRejectedValue(new Error("Database unavailable"));
   expect((await POST(request(signed()))).status).toBe(500);
 });
+it("stops consuming an unsigned stream as soon as the size limit is crossed", async () => {
+  let chunks = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (chunks++ === 128) controller.close();
+      else controller.enqueue(new Uint8Array(64 * 1024));
+    },
+  });
+  const req = new Request("https://signal.example/api/webhooks/stripe", {
+    method: "POST",
+    body,
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+  expect((await POST(req)).status).toBe(413);
+  expect(chunks).toBeLessThan(128);
+  expect(h.process).not.toHaveBeenCalled();
+});
