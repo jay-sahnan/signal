@@ -172,7 +172,10 @@ describe("fetchGitHubStargazers", () => {
   });
 
   it("records the signal when the seed exists", async () => {
-    signals = [{ id: "sig-1", slug: "github-stargazers" }];
+    signals = [
+      { id: "custom-signal", slug: "github-stargazers", is_builtin: false },
+      { id: "sig-1", slug: "github-stargazers", is_builtin: true },
+    ];
     routes.set("/repos/acme/tool/stargazers", { body: starPage(["jane"]) });
     routes.set("/repos/acme/tool", { body: repo(1) });
 
@@ -183,6 +186,7 @@ describe("fetchGitHubStargazers", () => {
 
     expect(result.signal_tracked).toBe(true);
     expect(signalResults).toHaveLength(1);
+    expect(signalResults[0].signal_id).toBe("sig-1");
   });
 });
 
