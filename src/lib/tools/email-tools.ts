@@ -1,4 +1,4 @@
-import { executePaidAction } from "@/lib/billing/paid-action";
+import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 import { toolOperationKey } from "@/lib/billing/tool-operation-key";
 import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { getCurrentIdentity } from "@/lib/auth/identity";
@@ -182,6 +182,15 @@ async function findEmailForPersonImpl(
     return { email: null, reason: "Person not found.", personId };
   }
 
+  const verify = opts.verify ?? opts.revalidate ?? false;
+  const paidInput = billingSession && !getCurrentIdentity()?.operationId ? {
+    identity: getCurrentIdentity() ?? { userId: billingSession.userId, source: "web" as const },
+    key: opts.operationKey ?? null,
+    kind: verify ? "email.verify" : "email.lookup",
+    request: { personId, revalidate: opts.revalidate ?? false, verify },
+  } : null;
+  const existing = paidInput && await hasPaidAction(paidInput);
+
   // An address we already hold short-circuits everything — unless it has never
   // been proven, in which case verifying it IS the job.
   //
@@ -195,7 +204,7 @@ async function findEmailForPersonImpl(
     person.work_email_source === "user_entered" ||
     person.work_email_source === "send_confirmed";
 
-  if (!snapshot && person.work_email && (alreadyTrusted || !opts.revalidate)) {
+  if (!snapshot && !existing && person.work_email && (alreadyTrusted || !opts.revalidate)) {
     return {
       email: person.work_email,
       source: person.work_email_source ?? "existing",
@@ -211,7 +220,7 @@ async function findEmailForPersonImpl(
   // Same revalidate carve-out as above: without it, a person who happens to
   // have a personal address short-circuits here and their unverified work email
   // is never checked, while the tool reports success.
-  if (!snapshot && person.personal_email && !opts.revalidate) {
+  if (!snapshot && !existing && person.personal_email && !opts.revalidate) {
     return { email: person.personal_email, source: "existing", personId };
   }
 
@@ -244,19 +253,9 @@ async function findEmailForPersonImpl(
     orgIsCatchAll = org?.is_catch_all ?? null;
   }
 
-  if (billingSession && !getCurrentIdentity()?.operationId) {
-    const identity = getCurrentIdentity() ?? {
-      userId: billingSession.userId,
-      source: "web" as const,
-    };
-    const verify = opts.verify ?? opts.revalidate ?? false;
+  if (paidInput) {
     return executePaidAction(
-      {
-        identity,
-        key: opts.operationKey ?? null,
-        kind: verify ? "email.verify" : "email.lookup",
-        request: { personId, revalidate: opts.revalidate ?? false, verify },
-      },
+      paidInput,
       // Freeze preflight: no repeated reads or cached-return paths after reservation.
       () =>
         findEmailForPersonImpl(personId, opts, {
