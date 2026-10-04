@@ -1,5 +1,5 @@
 import { isHostedMode } from "@/lib/auth/workspace";
-import { executePaidAction } from "@/lib/billing/paid-action";
+import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { withAction } from "@/lib/services/cost-tracker";
 import { createClient, getSupabaseAndUser } from "@/lib/supabase/server";
@@ -196,9 +196,16 @@ async function enrichRequest(request: Request) {
       companyId,
     );
   }
+  const paidInput = {
+    identity: { userId: user.id, source: "web" as const },
+    key: request.headers.get("Idempotency-Key"),
+    kind: "company.enrich.web",
+    request: { organizationId: orgId, campaignId: effectiveCampaignId },
+  };
   const recent = await isRecentlyEnriched("organizations", orgId, 7, true);
   // Without a domain there is no contact-discovery work to run on a cached profile.
-  if (recent && !org.domain)
+  const existing = recent && !org.domain && await hasPaidAction(paidInput);
+  if (recent && !org.domain && !existing)
     return Response.json({
       companyId: orgId,
       enrichmentData: org.enrichment_data,
@@ -206,12 +213,7 @@ async function enrichRequest(request: Request) {
       contactsFound: 0,
     });
   const result = await executePaidAction(
-    {
-      identity: { userId: user.id, source: "web" },
-      key: request.headers.get("Idempotency-Key"),
-      kind: "company.enrich.web",
-      request: { organizationId: orgId, campaignId: effectiveCampaignId },
-    },
+    paidInput,
     async () => {
       const response = await enrichOrganization(
         org,
@@ -220,7 +222,7 @@ async function enrichRequest(request: Request) {
         user.id,
         effectiveCampaignId,
         companyId,
-        recent,
+        recent && !existing,
       );
       if (!response.ok) throw new Error("Company research failed");
       return response.json();

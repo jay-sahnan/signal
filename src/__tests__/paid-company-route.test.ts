@@ -1,12 +1,14 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  existing: vi.fn(),
   provider: vi.fn(),
   reviews: vi.fn(),
   discovery: vi.fn(),
   action: vi.fn(),
   recent: vi.fn(),
   hosted: true,
+  domain: "acme.test" as string | null,
 }));
 vi.mock("@/lib/services/exa-service", () => ({
   ExaService: class {
@@ -31,7 +33,7 @@ vi.mock("@/lib/services/contact-discovery", () => ({
   findContactsForOrganization: h.discovery,
 }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
-vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
+vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid, hasPaidAction: h.existing }));
 vi.mock("@/lib/services/cost-tracker", () => ({ withAction: h.action }));
 vi.mock("@/lib/services/knowledge-base", () => ({
   isRecentlyEnriched: h.recent,
@@ -51,7 +53,7 @@ vi.mock("@/lib/supabase/server", () => {
                   organization_id: "org",
                   campaign_id: "campaign",
                   campaign: { user_id: "owner" },
-                  organization: { name: "Acme", domain: "acme.test" },
+                  organization: { name: "Acme", domain: h.domain },
                 }
               : { user_id: "owner" },
         }),
@@ -80,6 +82,8 @@ const call = (body: unknown = { companyId: "link" }) =>
 beforeEach(() => {
   vi.resetAllMocks();
   h.hosted = true;
+  h.domain = "acme.test";
+  h.existing.mockResolvedValue(false);
   h.reviews.mockRejectedValue(new Error("Reviews offline"));
   h.recent.mockResolvedValue(false);
   h.paid.mockResolvedValue({ companyId: "org", contactsFound: 2 });
@@ -177,4 +181,26 @@ it("does not count a reviews miss as successful research when every other source
   });
   expect((await call()).status).toBe(409);
   expect(h.discovery).not.toHaveBeenCalled();
+});
+
+it("replays a domainless company request instead of returning a synthetic cached result", async () => {
+  h.domain = null;
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  h.paid.mockResolvedValue({ companyId: "org", contactsFound: 0, errors: ["Original error"] });
+  expect(await (await call()).json()).toEqual({ companyId: "org", contactsFound: 0, errors: ["Original error"] });
+  expect(h.action).not.toHaveBeenCalled();
+});
+it("preserves unresolved billing status for recent domainless companies", async () => {
+  h.domain = null;
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  h.paid.mockRejectedValue(new CreditExecutionError("Unresolved", 409));
+  expect((await call()).status).toBe(409);
+});
+it("keeps new domainless cached reads free", async () => {
+  h.domain = null;
+  h.recent.mockResolvedValue(true);
+  expect(await (await call()).json()).toMatchObject({ skipped: true });
+  expect(h.paid).not.toHaveBeenCalled();
 });
