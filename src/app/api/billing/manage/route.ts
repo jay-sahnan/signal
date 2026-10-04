@@ -1,13 +1,16 @@
 import { BillingRequestError } from "@/lib/billing/account";
-import { openBillingPortal, refreshBilling } from "@/lib/billing/management";
+import {
+  openPrepaidPortal,
+  refreshPrepaidBilling,
+} from "@/lib/billing/prepaid-management";
 
 export async function POST(request: Request) {
   try {
     if (new URL(request.url).searchParams.get("action") === "refresh") {
-      await refreshBilling(request);
+      await refreshPrepaidBilling(request);
       return Response.json({ refreshed: true });
     }
-    return Response.json({ url: await openBillingPortal(request) });
+    return Response.json({ url: await openPrepaidPortal(request) });
   } catch (error) {
     if (error instanceof BillingRequestError)
       return Response.json({ error: error.message }, { status: error.status });

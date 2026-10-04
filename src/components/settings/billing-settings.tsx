@@ -1,22 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { billingStatus } from "@/lib/billing/management";
+import type { prepaidStatus } from "@/lib/billing/prepaid-management";
 import { Button } from "@/components/ui/button";
 
-type Status = Awaited<ReturnType<typeof billingStatus>>;
-const labels: Record<string, string> = {
-  none: "No confirmed subscription",
-  active: "Active",
-  canceled: "Canceled",
-  past_due: "Payment overdue",
-  unpaid: "Payment required",
-  paused: "Paused",
-  incomplete: "Payment pending",
-  incomplete_expired: "Checkout expired",
-  trialing: "Trial",
-};
-
+type Status = Awaited<ReturnType<typeof prepaidStatus>>;
 export function BillingSettings({ initial }: { initial: Status }) {
   const [status, setStatus] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
@@ -50,9 +38,6 @@ export function BillingSettings({ initial }: { initial: Status }) {
       setBusy(null);
     }
   }
-  const canSubscribe =
-    !status.riskHold &&
-    ["none", "canceled", "incomplete_expired"].includes(status.status);
   return (
     <section
       className="space-y-6"
@@ -61,26 +46,34 @@ export function BillingSettings({ initial }: { initial: Status }) {
     >
       <div className="rounded-xl border p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">Signal monthly plan</h2>
+          <h2 className="text-lg font-semibold">Workspace credits</h2>
           <span className="rounded-full bg-muted px-3 py-1 text-sm">
-            {labels[status.status] ?? "Awaiting confirmation"}
+            Prepaid
           </span>
         </div>
-        <p className="text-muted-foreground text-sm tabular-nums">
-          {status.plan.monthlyUnits.toLocaleString()} research units and up to{" "}
-          {status.plan.monitorLimit.toLocaleString()} monitored companies per
-          month. Shared across Signal and ChatGPT.
+        <dl className="grid grid-cols-3 gap-3 tabular-nums">
+          {[
+            ["Available credits", status.available],
+            ["Reserved", status.reserved],
+            ["Spent", status.spent],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-sm text-muted-foreground">{label}</dt>
+              <dd className="text-xl font-semibold">
+                {value.toLocaleString()}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-muted-foreground text-sm">
+          New top-ups add {status.packCredits.toLocaleString()} credits per
+          pack. Purchased credits do not expire. Top-ups are manual; there is no
+          automatic renewal.
         </p>
-        {status.periodEnd && (
+        {status.pendingPurchase && (
           <p className="text-sm">
-            {status.cancelAtPeriodEnd
-              ? "Scheduled to end"
-              : "Current period ends"}{" "}
-            {new Date(status.periodEnd).toLocaleDateString("en-US", {
-              timeZone: "UTC",
-              dateStyle: "medium",
-            })}
-            .
+            Your purchase of {status.pendingCredits?.toLocaleString()} credits
+            is pending. Resume checkout or refresh to check confirmation.
           </p>
         )}
         {status.riskHold && (
@@ -90,7 +83,7 @@ export function BillingSettings({ initial }: { initial: Status }) {
         )}
         {status.canManage ? (
           <div className="flex flex-wrap gap-2">
-            {canSubscribe && (
+            {!status.riskHold && (
               <Button
                 className="min-h-11"
                 disabled={busy !== null}
@@ -98,7 +91,9 @@ export function BillingSettings({ initial }: { initial: Status }) {
               >
                 {busy === "checkout"
                   ? "Opening checkout…"
-                  : "View pricing and subscribe"}
+                  : status.pendingPurchase
+                    ? "Resume checkout"
+                    : "Buy credits"}
               </Button>
             )}
             {status.hasCustomer && (
@@ -124,14 +119,14 @@ export function BillingSettings({ initial }: { initial: Status }) {
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Your workspace owner manages the subscription.
+            Your workspace owner manages credit purchases.
           </p>
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        Stripe shows the price before you confirm payment. After paying or
-        changing your subscription, refresh status to check confirmation.
-        Returning from checkout alone does not activate access.
+        Stripe shows the price before you confirm payment. After paying, refresh
+        status to check your balance. Credits are added only after payment is
+        verified. Reserved credits are held for work in progress.
       </p>
       <div className="min-h-6" aria-live="polite">
         {error && (

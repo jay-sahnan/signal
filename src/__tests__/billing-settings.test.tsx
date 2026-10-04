@@ -8,46 +8,45 @@ import {
 } from "@testing-library/react";
 import { BillingSettings } from "@/components/settings/billing-settings";
 const initial = {
-  status: "none",
   canManage: true,
   hasCustomer: false,
-  periodEnd: null,
-  monthlyUnits: 0,
-  monitorLimit: 0,
-  cancelAtPeriodEnd: false,
+  available: 100,
+  reserved: 10,
+  spent: 20,
   riskHold: false,
-  reconciledAt: null,
-  plan: { monthlyUnits: 100, monitorLimit: 5 },
+  pendingPurchase: false,
+  pendingCredits: null,
+  packCredits: 200,
 };
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-it("shows plan allowances and keeps owner actions off a member's screen", () => {
+it("shows wallet totals and keeps owner actions off a member's screen", () => {
   render(<BillingSettings initial={{ ...initial, canManage: false }} />);
-  expect(screen.getByText(/100 research units/)).toBeTruthy();
-  expect(screen.queryByRole("button", { name: /pricing/i })).toBeNull();
+  expect(screen.getByText(/Available credits/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /buy credits/i })).toBeNull();
   expect(screen.getByText(/workspace owner/)).toBeTruthy();
 });
 it("reports checkout errors and allows retry without claiming payment succeeded", async () => {
-  const fetch = vi
-    .fn()
-    .mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: "Checkout unavailable" }),
-    });
+  const fetch = vi.fn().mockResolvedValue({
+    ok: false,
+    json: async () => ({ error: "Checkout unavailable" }),
+  });
   vi.stubGlobal("fetch", fetch);
   render(<BillingSettings initial={initial} />);
-  fireEvent.click(screen.getByRole("button", { name: /pricing/i }));
+  fireEvent.click(screen.getByRole("button", { name: /buy credits/i }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Checkout unavailable",
   );
-  expect(screen.getByRole("button", { name: /pricing/i })).not.toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: /buy credits/i }),
+  ).not.toBeDisabled();
   expect(fetch).toHaveBeenCalledWith("/api/billing/checkout", {
     method: "POST",
   });
 });
-it("refreshes confirmed billing status and retains portal access after cancellation", async () => {
+it("refreshes the confirmed credit balance and retains payment history", async () => {
   const fetch = vi
     .fn()
     .mockResolvedValueOnce({
@@ -56,24 +55,35 @@ it("refreshes confirmed billing status and retains portal access after cancellat
     })
     .mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ ...initial, status: "canceled", hasCustomer: true }),
+      json: async () => ({ ...initial, available: 300, hasCustomer: true }),
     });
   vi.stubGlobal("fetch", fetch);
   render(
     <BillingSettings
-      initial={{ ...initial, hasCustomer: true, status: "active" }}
+      initial={{ ...initial, hasCustomer: true, available: 100 }}
     />,
   );
   fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-  await waitFor(() => expect(screen.getByText("Canceled")).toBeTruthy());
+  await waitFor(() => expect(screen.getByText("300")).toBeTruthy());
   expect(screen.getByRole("button", { name: /manage billing/i })).toBeTruthy();
 });
-it("shows a hold instead of offering another subscription", () => {
+it("shows a hold instead of offering another purchase", () => {
   render(
     <BillingSettings
       initial={{ ...initial, riskHold: true, hasCustomer: true }}
     />,
   );
   expect(screen.getByRole("alert")).toHaveTextContent(/review/i);
-  expect(screen.queryByRole("button", { name: /pricing/i })).toBeNull();
+  expect(screen.queryByRole("button", { name: /buy credits/i })).toBeNull();
+});
+
+it("explains manual top-ups and pending confirmation", () => {
+  render(
+    <BillingSettings
+      initial={{ ...initial, pendingPurchase: true, pendingCredits: 75 }}
+    />,
+  );
+  expect(screen.getByText(/do not expire/)).toBeTruthy();
+  expect(screen.getByText(/75 credits is pending/i)).toBeTruthy();
+  expect(screen.getByRole("button", { name: /resume checkout/i })).toBeTruthy();
 });

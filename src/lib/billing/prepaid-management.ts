@@ -19,7 +19,7 @@ async function accountRow(workspace: string) {
 async function pendingOrder(workspace: string) {
   const row = await getAdminClient()
     .from("credit_orders")
-    .select("id, session_id, customer_id")
+    .select("id, session_id, customer_id, credits")
     .eq("workspace_id", workspace)
     .eq("state", "pending")
     .maybeSingle();
@@ -65,6 +65,7 @@ export async function prepaidStatus() {
     hasCustomer: Boolean(account?.stripe_customer_id),
     riskHold: Boolean(account?.risk_hold),
     pendingPurchase: Boolean(pending),
+    pendingCredits: pending ? Number(pending.credits) : null,
     packCredits: prepaidConfig().credits,
   };
 }
