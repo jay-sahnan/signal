@@ -1,5 +1,6 @@
 import { createMcpHandler, withMcpAuth } from "mcp-handler";
 
+import { isHostedMode, resolveWorkspace } from "@/lib/auth/workspace";
 import { runWithIdentity } from "@/lib/auth/identity";
 import { verifyMcpBearer } from "@/lib/mcp/auth";
 import { mcpConfigError } from "@/lib/mcp/config";
@@ -21,8 +22,11 @@ const handler = createMcpHandler(
             return { isError: true, ...toMcpResult({ error: "Unauthorized" }) };
           }
           try {
+            const workspaceId = isHostedMode()
+              ? await resolveWorkspace(userId)
+              : undefined;
             const result = await runWithIdentity(
-              { userId, source: "mcp" },
+              { userId, source: "mcp", workspaceId },
               () => t.execute(input, {}),
             );
             return toMcpResult(result);
