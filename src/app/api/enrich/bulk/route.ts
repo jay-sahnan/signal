@@ -1,3 +1,8 @@
+import { z } from "zod";
+import { isHostedMode } from "@/lib/auth/workspace";
+import { executePaidAction } from "@/lib/billing/paid-action";
+import { toolOperationKey } from "@/lib/billing/tool-operation-key";
+import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { NextResponse } from "next/server";
 
 import { getSupabaseAndUser } from "@/lib/supabase/server";
@@ -35,29 +40,63 @@ const CONCURRENCY = 4;
 
 /** organizationId is required: one click = one company, never a campaign-wide fanout. */
 export async function POST(req: Request) {
+  try {
+    return await enrichBatch(req);
+  } catch (error) {
+    console.error("[enrich/bulk] Request failed", error);
+    return NextResponse.json(
+      { error: "Could not prepare enrichment. Retry the same batch." },
+      { status: 500 },
+    );
+  }
+}
+
+async function enrichBatch(req: Request) {
   const ctx = await getSupabaseAndUser();
   if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user } = ctx;
 
-  let body: { campaignId?: string; organizationId?: string };
+  let body: {
+    campaignId?: string;
+    organizationId?: string;
+    personIds?: string[];
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { campaignId, organizationId } = body;
-  if (!campaignId) {
+  const { campaignId, organizationId } = body ?? {};
+  if (typeof campaignId !== "string" || !campaignId) {
     return NextResponse.json({ error: "campaignId required" }, { status: 400 });
   }
-  if (!organizationId) {
+  if (typeof organizationId !== "string" || !organizationId) {
     return NextResponse.json(
       { error: "organizationId required (one company per request)" },
       { status: 400 },
     );
   }
+
+  const hosted = isHostedMode();
+  const batchKey = req.headers.get("Idempotency-Key");
+  const selection = z
+    .array(z.string().uuid())
+    .min(1)
+    .max(MAX_PER_REQUEST)
+    .refine((ids) => new Set(ids).size === ids.length)
+    .safeParse(body.personIds);
+  if (
+    (hosted && !z.string().uuid().safeParse(batchKey).success) ||
+    ((hosted || body.personIds !== undefined) && !selection.success)
+  )
+    return NextResponse.json(
+      { error: "A valid retry key and 1–10 unique contact IDs are required." },
+      { status: 400 },
+    );
+  const selected = selection.success ? new Set(selection.data) : null;
 
   const { data: campaign } = await supabase
     .from("campaigns")
@@ -68,12 +107,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { data: rows, error } = await supabase
+  let query = supabase
     .from("campaign_people")
     .select(
       `person:people!inner(id, organization_id, ${PERSON_ENRICH_COLUMNS})`,
     )
     .eq("campaign_id", campaignId);
+  if (selected)
+    query = query
+      .in("person_id", [...selected])
+      .eq("person.organization_id", organizationId);
+  const { data: rows, error } = await query;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -87,7 +131,7 @@ export async function POST(req: Request) {
   const candidates: Array<{ id: string; person: PersonForEnrichment }> = [];
   for (const row of (rows ?? []) as unknown as Row[]) {
     const person = row.person;
-    if (!person) continue;
+    if (!person || (selected && !selected.has(person.id))) continue;
     if (person.organization_id !== organizationId) continue;
     candidates.push({ id: person.id, person });
   }
@@ -96,7 +140,7 @@ export async function POST(req: Request) {
   // is 7 days, so genuinely stale data still refreshes rather than being
   // frozen forever by one old run.
   const fresh = await Promise.all(
-    candidates.map((c) => isRecentlyEnriched("people", c.id)),
+    candidates.map((c) => isRecentlyEnriched("people", c.id, 7, hosted)),
   );
   const pending = candidates.filter((_, i) => !fresh[i]);
   const alreadyEnriched = candidates.length - pending.length;
@@ -106,21 +150,59 @@ export async function POST(req: Request) {
   const enriched: string[] = [];
   const failed: Array<{ personId: string; reason?: string }> = [];
 
+  const blocked: Array<{ error: string; status: number }> = [];
+
   // Simple worker pool: CONCURRENCY workers pulling from one cursor.
   let cursor = 0;
   await Promise.all(
     Array.from({ length: Math.min(CONCURRENCY, targets.length) }, async () => {
       for (;;) {
+        if (blocked.length) return;
         const index = cursor++;
         if (index >= targets.length) return;
         const target = targets[index];
         try {
-          const result = await enrichPerson(
-            supabase,
-            target.id,
-            target.person,
-            user.id,
-          );
+          if (
+            hosted &&
+            (!target.person.name || target.person.name === "Unknown") &&
+            !target.person.linkedin_url &&
+            !target.person.twitter_url
+          )
+            throw new CreditExecutionError(
+              "No enrichment sources available",
+              400,
+            );
+          const work = async () => {
+            const result = await enrichPerson(
+              supabase,
+              target.id,
+              target.person,
+              user.id,
+            );
+            if (hosted && result.status === "failed")
+              throw new Error("All enrichment sources failed");
+            return result;
+          };
+          const result = hosted
+            ? await executePaidAction(
+                {
+                  identity: { userId: user.id, source: "web" },
+                  kind: "contact.enrich.web",
+                  key: toolOperationKey(
+                    "web",
+                    undefined,
+                    JSON.stringify([
+                      batchKey!.toLowerCase(),
+                      campaignId,
+                      organizationId,
+                      target.id,
+                    ]),
+                  ),
+                  request: { personId: target.id },
+                },
+                work,
+              )
+            : await work();
           if (result.status === "enriched") enriched.push(target.id);
           else
             failed.push({
@@ -128,6 +210,14 @@ export async function POST(req: Request) {
               reason: result.errors?.[0] ?? "No data found",
             });
         } catch (err) {
+          if (hosted && !blocked.length)
+            blocked.push({
+              error:
+                err instanceof CreditExecutionError
+                  ? err.message
+                  : "Enrichment failed. Retry the same batch.",
+              status: err instanceof CreditExecutionError ? err.status : 500,
+            });
           failed.push({
             personId: target.id,
             reason: err instanceof Error ? err.message : "Unknown error",
@@ -136,6 +226,20 @@ export async function POST(req: Request) {
       }
     }),
   );
+
+  if (blocked.length)
+    return NextResponse.json(
+      {
+        error: blocked[0].error,
+        enriched: enriched.length,
+        failed: failed.length,
+        remaining: Math.max(
+          0,
+          targets.length - enriched.length - failed.length,
+        ),
+      },
+      { status: blocked[0].status },
+    );
 
   const remaining = Math.max(0, pending.length - targets.length);
 
