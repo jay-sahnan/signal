@@ -3,6 +3,12 @@ import { type Identity, runWithIdentity } from "@/lib/auth/identity";
 import { isHostedMode } from "@/lib/auth/workspace";
 import { getAdminClient } from "@/lib/supabase/admin";
 
+/** Trusted server-only outcome, returned only before any provider/billable work.
+ * Never use for provider errors, timeouts, or work whose outcome is uncertain. */
+export class NoBillableWork<T> {
+  constructor(readonly value: T) {}
+}
+
 export class CreditExecutionError extends Error {
   constructor(
     message: string,
@@ -44,9 +50,12 @@ type CreditExecution = {
 /** Caller supplies verified identity and a durable operation key reused on retries. */
 export async function executeWithCredits<T>(
   input: CreditExecution,
-  work: () => Promise<T>,
+  work: () => Promise<T | NoBillableWork<T>>,
 ): Promise<T> {
-  if (!isHostedMode()) return work();
+  if (!isHostedMode()) {
+    const result = await work();
+    return result instanceof NoBillableWork ? result.value : result;
+  }
   const { identity } = input;
   if (!identity.workspaceId || !identity.userId)
     throw new CreditExecutionError("Workspace identity required", 401);
@@ -115,10 +124,11 @@ export async function executeWithCredits<T>(
       409,
     );
   try {
-    const result = await runWithIdentity(
+    const outcome = await runWithIdentity(
       { ...identity, operationId: op.id },
       work,
     );
+    const result = outcome instanceof NoBillableWork ? outcome.value : outcome;
     const serialized = JSON.stringify(result);
     // Large research responses live separately from the compact credit ledger.
     if (serialized === undefined || Buffer.byteLength(serialized) > 1_000_000)
@@ -126,7 +136,7 @@ export async function executeWithCredits<T>(
     const settled = await db.rpc("finish_serialized_credit_result", {
       p_id: op.id,
       p_user: identity.userId,
-      p_charged: op.credits,
+      p_charged: outcome instanceof NoBillableWork ? 0 : op.credits,
       p_result: serialized,
     });
     if (settled.error)
