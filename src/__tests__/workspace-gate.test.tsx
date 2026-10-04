@@ -76,3 +76,29 @@ it("allows recovery when the server refresh stalls without exposing stale data",
   await waitFor(() => expect(h.refresh).toHaveBeenCalledTimes(2));
   expect(screen.queryByText("Private data")).toBeNull();
 });
+
+it("retries failed server provisioning without exposing children", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ ready: true }) }),
+  );
+  render(
+    <WorkspaceGate initialUser="new-user" initialReady={false}>
+      Private data
+    </WorkspaceGate>,
+  );
+  await waitFor(() => expect(h.refresh).toHaveBeenCalled());
+  expect(screen.queryByText("Private data")).toBeNull();
+  expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+});
+it("keeps a full navigation to sign-in available after a stalled sign-out refresh", () => {
+  h.userId = null;
+  render(<WorkspaceGate initialUser="old-user">Private data</WorkspaceGate>);
+  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    "/login",
+  );
+  expect(screen.queryByText("Private data")).toBeNull();
+});

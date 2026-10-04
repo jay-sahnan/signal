@@ -40,7 +40,11 @@ it("allows anonymous login pages without provisioning", async () => {
 });
 it("blocks rendering when workspace membership is revoked", async () => {
   h.resolve.mockRejectedValue(new Error("Workspace unavailable"));
-  await expect(WorkspaceBootstrap({ children: "content" })).rejects.toThrow();
+  await expect(
+    WorkspaceBootstrap({ children: "content" }),
+  ).resolves.toMatchObject({
+    props: { initialUser: "user", initialReady: false },
+  });
 });
 it("provisions authenticated API clients before creating a database client", async () => {
   await createClient();
