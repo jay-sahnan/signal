@@ -498,12 +498,16 @@ async function enrichOrganization(
 
       enrichmentData.searches = searches;
 
+      // A business match without ratings or reviews is not research evidence.
+      let hasGoogleReviewEvidence = false;
       // Google Reviews
       if (
         googleReviewsResult.status === "fulfilled" &&
         googleReviewsResult.value?.found
       ) {
         const gr = googleReviewsResult.value;
+        hasGoogleReviewEvidence = (gr.rating ?? 0) > 0 ||
+          (gr.userRatingCount ?? 0) > 0 || gr.reviews.length > 0;
         enrichmentData.googleReviews = {
           rating: gr.rating,
           reviewCount: gr.userRatingCount,
@@ -535,7 +539,7 @@ async function enrichOrganization(
         isHostedMode() &&
         !searches.length &&
         !enrichmentData.website &&
-        !enrichmentData.googleReviews &&
+        !hasGoogleReviewEvidence &&
         !careers
       )
         throw new Error("All company research sources failed");
