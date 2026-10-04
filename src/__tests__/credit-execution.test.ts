@@ -40,9 +40,8 @@ it("reserves and starts before work, then settles once with its replayable resul
   });
   expect(await executeWithCredits(input, work)).toEqual({ found: 2 });
   expect(h.rpc).toHaveBeenLastCalledWith(
-    "finish_credit_operation",
+    "finish_credit_result",
     expect.objectContaining({
-      p_state: "succeeded",
       p_charged: 5,
       p_result: { found: 2 },
     }),
@@ -59,9 +58,9 @@ it("blocks provider work when credit reservation fails", async () => {
   expect(work).not.toHaveBeenCalled();
 });
 it("returns a completed replay without running the provider again", async () => {
-  h.rpc.mockResolvedValue({
-    data: { id: "operation", state: "succeeded", result: { found: 2 } },
-  });
+  h.rpc
+    .mockResolvedValueOnce({ data: { id: "operation", state: "succeeded" } })
+    .mockResolvedValueOnce({ data: { found: 2 } });
   const work = vi.fn();
   expect(await executeWithCredits(input, work)).toEqual({ found: 2 });
   expect(work).not.toHaveBeenCalled();
@@ -106,7 +105,7 @@ it("never repeats work when saving a successful result fails", async () => {
       name === "reserve_credit_quote"
         ? { id: "operation", state: "reserved", credits: 5 }
         : true,
-    error: name === "finish_credit_operation" ? { message: "offline" } : null,
+    error: name === "finish_credit_result" ? { message: "offline" } : null,
   }));
   const work = vi.fn(async () => ({ found: 2 }));
   await expect(executeWithCredits(input, work)).rejects.toThrow("settlement");
@@ -136,7 +135,16 @@ it("settles the frozen quote returned by the database after a rate change", asyn
     async () => null,
   );
   expect(h.rpc).toHaveBeenLastCalledWith(
-    "finish_credit_operation",
+    "finish_credit_result",
     expect.objectContaining({ p_charged: 5 }),
+  );
+});
+
+it("stores and replays research payloads larger than the inline ledger limit", async () => {
+  const result = { body: "x".repeat(100000) };
+  expect(await executeWithCredits(input, async () => result)).toEqual(result);
+  expect(h.rpc).toHaveBeenLastCalledWith(
+    "finish_credit_result",
+    expect.objectContaining({ p_result: result }),
   );
 });
