@@ -2,8 +2,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api-fetch", () => ({ apiFetch: fetchMock }));
 import { requestBulkEmailLookup } from "@/lib/billing/bulk-email-request";
-const request = (ids: string[], fresh = false) =>
-  requestBulkEmailLookup("owner", "campaign", "org", ids, fresh);
+const request = (ids: string[]) =>
+  requestBulkEmailLookup("owner", "campaign", "org", ids);
 beforeEach(() => {
   sessionStorage.clear();
   fetchMock.mockReset();
@@ -21,16 +21,16 @@ it("retries the frozen batch even if the current contact list changes", async ()
   );
   expect(sessionStorage.length).toBe(0);
 });
-it("keeps credit-denied batches until explicit new work is selected", async () => {
+it("keeps credit-denied batches while retrying", async () => {
   fetchMock.mockImplementation(async () =>
     Response.json({ error: "Insufficient credits" }, { status: 402 }),
   );
   await expect(request(["one"])).rejects.toThrow("Insufficient credits");
-  await expect(request(["two"], true)).rejects.toThrow("Insufficient credits");
+  await expect(request(["two"])).rejects.toThrow("Insufficient credits");
   expect(JSON.parse(fetchMock.mock.calls[1][1].body).personIds).toEqual([
-    "two",
+    "one",
   ]);
-  expect(fetchMock.mock.calls[1][1].headers["Idempotency-Key"]).not.toBe(
+  expect(fetchMock.mock.calls[1][1].headers["Idempotency-Key"]).toBe(
     fetchMock.mock.calls[0][1].headers["Idempotency-Key"],
   );
 });

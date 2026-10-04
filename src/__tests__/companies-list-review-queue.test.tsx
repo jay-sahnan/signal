@@ -300,10 +300,11 @@ describe("<CompaniesList> bulk find emails", () => {
       expect(toast.error).toHaveBeenCalledWith(
         "database is on fire",
         expect.objectContaining({
-          action: expect.objectContaining({ label: "New batch" }),
+          description: expect.stringContaining("same batch"),
         }),
       ),
     );
+    expect(vi.mocked(toast.error).mock.calls.at(-1)?.[1]?.action).toBeUndefined();
     expect(toast.success).not.toHaveBeenCalled();
   });
 

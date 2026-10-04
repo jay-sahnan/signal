@@ -468,7 +468,6 @@ function ReviewPageInner() {
   const handleEnrich = useCallback(
     async function retryEnrichment(
       contactId: string,
-      newAttempt = false,
     ): Promise<void> {
       const personId = contactId;
       if (enrichingPersonIds.has(personId)) return;
@@ -486,7 +485,6 @@ function ReviewPageInner() {
         const result = await requestContactEnrichment(
           userId,
           personId,
-          newAttempt,
         );
 
         const enrichmentData = (result.enrichmentData ?? {}) as EnrichmentData;
@@ -513,11 +511,7 @@ function ReviewPageInner() {
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Enrichment failed", {
           description:
-            "Retry keeps the same request. New enrichment can use additional credits; previous work may still be reserved.",
-          action: {
-            label: "New enrichment",
-            onClick: () => void retryEnrichment(contactId, true),
-          },
+            "Use the enrichment button to retry the same request. Credits may remain reserved while its outcome is unresolved.",
         });
         setDrafts((prev) =>
           prev.map((d) =>
