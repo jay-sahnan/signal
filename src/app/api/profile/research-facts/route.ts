@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { z } from "zod";
-import { executePaidAction } from "@/lib/billing/paid-action";
+import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 import { CreditExecutionError } from "@/lib/billing/credit-execution";
 
 import { loadAllSenderFacts } from "@/lib/sender-facts";
@@ -66,25 +66,23 @@ export async function POST(request: Request) {
     profile.company_url,
     profile.twitter_url,
   ];
-  if (!urls.some((url) => typeof url === "string" && url.trim() && hostOf(url)))
-    return NextResponse.json(
-      { error: "Add a profile URL before researching." },
-      { status: 400 },
-    );
-
+  const paidInput = {
+    identity: { userId: user.id, source: "web" as const },
+    key: request.headers.get("Idempotency-Key"),
+    kind: "profile.research",
+    request: { profileId: profile.id },
+  };
   try {
+    if (
+      !urls.some((url) => typeof url === "string" && url.trim() && hostOf(url)) &&
+      !(await hasPaidAction(paidInput))
+    )
+      return NextResponse.json(
+        { error: "Add a profile URL before researching." },
+        { status: 400 },
+      );
     const output = await executePaidAction(
-      {
-        identity: { userId: user.id, source: "web" },
-        key: request.headers.get("Idempotency-Key"),
-        kind: "profile.research",
-        request: {
-          profileId: profile.id,
-          name: profile.name ?? null,
-          companyName: profile.company_name ?? null,
-          urls: urls.map((url) => url ?? null),
-        },
-      },
+      paidInput,
       async () => {
         const result = await researchSender(profile as UserProfile, user.id);
         if (!result.ok) throw new Error(result.error);
