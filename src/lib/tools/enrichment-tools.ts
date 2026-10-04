@@ -1,3 +1,7 @@
+import { executePaidAction } from "@/lib/billing/paid-action";
+import { toolOperationKey } from "@/lib/billing/tool-operation-key";
+import { getCurrentIdentity } from "@/lib/auth/identity";
+import { isHostedMode } from "@/lib/auth/workspace";
 import { readBodyCapped, safeFetch } from "@/lib/safe-fetch";
 import { tool } from "ai";
 import { z } from "zod";
@@ -69,10 +73,17 @@ function deadlineFrom(experimental_context: unknown): number | null {
   return typeof deadlineAt === "number" ? deadlineAt : null;
 }
 
-export const searchPeople = tool({
+const searchPeopleImpl = tool({
   description:
     "Search for people at companies using Exa semantic search with LinkedIn-focused queries. Stores results in the shared knowledge base. When campaignId is provided, links results to the campaign and deduplicates against existing campaign contacts. When the search targets a known company, ALWAYS pass companyName (and companyDomain if known) so results are linked to that organization for the org chart and per-company views.",
   inputSchema: z.object({
+    operationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe(
+        "Hosted MCP: new UUID for new paid research; reuse the same UUID on retries.",
+      ),
     campaignId: z
       .string()
       .uuid()
@@ -448,6 +459,64 @@ export const searchPeople = tool({
     };
   },
 });
+
+export const searchPeople = {
+  ...searchPeopleImpl,
+  execute: async (
+    input: Parameters<NonNullable<typeof searchPeopleImpl.execute>>[0],
+    opts: Parameters<NonNullable<typeof searchPeopleImpl.execute>>[1],
+  ) => {
+    if (!isHostedMode()) return searchPeopleImpl.execute!(input, opts);
+    const session = await toolSession();
+    if (!session) return { error: "Not authenticated." };
+    const { supabase, userId } = session;
+    if (input.campaignId) {
+      const { data, error } = await supabase
+        .from("campaigns")
+        .select("user_id")
+        .eq("id", input.campaignId)
+        .maybeSingle();
+      if (error || data?.user_id !== userId)
+        return { error: "Campaign not found." };
+    }
+    if (input.companyId) {
+      const { data, error } = await supabase
+        .from("campaign_organizations")
+        .select("campaign_id, campaign:campaigns!inner(user_id)")
+        .eq("id", input.companyId)
+        .maybeSingle();
+      const campaign = data?.campaign as unknown as { user_id?: string } | null;
+      if (
+        error ||
+        campaign?.user_id !== userId ||
+        (input.campaignId && data?.campaign_id !== input.campaignId)
+      )
+        return { error: "Company not found." };
+    }
+    const identity = getCurrentIdentity() ?? { userId, source: "web" as const };
+    return executePaidAction(
+      {
+        identity,
+        key: toolOperationKey(
+          identity.source,
+          input.operationId,
+          opts.toolCallId,
+        ),
+        kind: "people.search",
+        units: input.numResults,
+        request: {
+          query: input.query,
+          numResults: input.numResults,
+          campaignId: input.campaignId ?? null,
+          companyId: input.companyId ?? null,
+          companyName: input.companyName ?? null,
+          companyDomain: input.companyDomain ?? null,
+        },
+      },
+      async () => searchPeopleImpl.execute!(input, opts),
+    );
+  },
+};
 
 export function summarizeContactEnrichment(
   data: Record<string, unknown>,
