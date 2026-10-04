@@ -7,6 +7,8 @@ const isPublicRoute = createRouteMatcher([
   // Container orchestrators cannot present a session, and a health check that
   // 307s to /login tells them nothing. Returns a fixed literal, reads nothing.
   "/api/health",
+  // Authenticated by Stripe signature over the raw request body.
+  "/api/webhooks/stripe",
   // MCP does its own bearer verification; a cookie redirect to /login would
   // break the OAuth discovery handshake for Claude Code / Codex.
   "/api/mcp(.*)",
