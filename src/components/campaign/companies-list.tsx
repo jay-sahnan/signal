@@ -685,6 +685,9 @@ export function CompaniesList({
                       )}
                       {company.organization_id && (
                         <EnrichAllButton
+                          personIds={companyContacts
+                            .filter((c) => c.enrichment_status !== "enriched")
+                            .map((c) => c.person_id)}
                           campaignId={campaignId}
                           organizationId={company.organization_id}
                           // Only what is actually left to do, so the number on

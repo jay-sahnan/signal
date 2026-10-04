@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -13,16 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { apiFetch } from "@/lib/api-fetch";
-
-interface BulkEnrichResponse {
-  enriched?: number;
-  failed?: number;
-  attempted?: number;
-  remaining?: number;
-  alreadyEnriched?: number;
-  summary?: string;
-}
+import { requestBulkEnrichment } from "@/lib/billing/bulk-enrichment-request";
 
 /**
  * "Enrich all" for one company's contacts.
@@ -40,35 +32,31 @@ export function EnrichAllButton({
   campaignId,
   organizationId,
   unenrichedCount,
+  personIds,
   onDone,
 }: {
   campaignId: string;
   organizationId: string;
   unenrichedCount: number;
+  personIds: string[];
   onDone: () => void;
 }) {
+  const { userId } = useAuth();
   const [open, setOpen] = useState(false);
   const [running, setRunning] = useState(false);
 
   if (unenrichedCount <= 0) return null;
 
-  const run = async () => {
+  const run = async (newAttempt = false) => {
     setRunning(true);
     try {
-      const res = await apiFetch("/api/enrich/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignId, organizationId }),
-      });
-      // apiFetch returns the Response unchanged and never throws on a non-2xx,
-      // so without this an error body reads as a run that enriched nobody.
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `HTTP ${res.status}`);
-      }
-      const data = (await res
-        .json()
-        .catch(() => null)) as BulkEnrichResponse | null;
+      const data = await requestBulkEnrichment(
+        userId,
+        campaignId,
+        organizationId,
+        personIds,
+        newAttempt,
+      );
 
       // The route caps each batch and skips anyone already enriched, so its
       // own summary is the accurate sentence; the fallback only covers a
@@ -80,7 +68,11 @@ export function EnrichAllButton({
       onDone();
     } catch (err) {
       console.error("[enrich/bulk] Failed:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to enrich");
+      toast.error(err instanceof Error ? err.message : "Failed to enrich", {
+        description:
+          "Retry keeps the original batch. A new batch can use additional credits; previous work may still be reserved.",
+        action: { label: "New batch", onClick: () => void run(true) },
+      });
     } finally {
       setRunning(false);
     }
@@ -109,7 +101,7 @@ export function EnrichAllButton({
             <DialogDescription>
               This spends enrichment credits, one charge per contact, and can
               take a couple of minutes. Contacts enriched in the last week are
-              skipped.
+              skipped. Each request processes up to ten contacts.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -121,7 +113,7 @@ export function EnrichAllButton({
             >
               Cancel
             </Button>
-            <Button size="sm" onClick={run} disabled={running}>
+            <Button size="sm" onClick={() => void run()} disabled={running}>
               {running ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />

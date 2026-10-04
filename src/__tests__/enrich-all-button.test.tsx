@@ -1,3 +1,4 @@
+vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ userId: "owner" }) }));
 import {
   cleanup,
   fireEvent,
@@ -29,6 +30,7 @@ const fetchMock = vi.mocked(apiFetch);
 
 afterEach(cleanup);
 beforeEach(() => {
+  sessionStorage.clear();
   fetchMock.mockReset();
   toastSuccess.mockReset();
   toastError.mockReset();
@@ -41,6 +43,7 @@ function renderButton(count = 3) {
       campaignId="camp_1"
       organizationId="org_1"
       unenrichedCount={count}
+      personIds={Array.from({ length: count }, (_, i) => `person-${i}`)}
       onDone={onDone}
     />,
   );
