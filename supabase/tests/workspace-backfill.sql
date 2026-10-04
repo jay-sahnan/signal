@@ -19,7 +19,7 @@ do $$ declare report jsonb; w uuid; begin
     perform public.ensure_workspace('other_customer');
     insert into public.organizations(name, workspace_id)
       select 'Other customer company', id from public.workspaces where owner_user_id = 'other_customer';
-    perform public.assign_legacy_workspace('legacy_owner', array['legacy_owner']);
+    perform public.assign_legacy_workspace('legacy_owner', array['legacy_owner'], true);
     raise exception 'mixed workspace graph accepted';
   exception when check_violation then null;
   end;
@@ -30,7 +30,7 @@ do $$ declare report jsonb; w uuid; begin
     w := public.ensure_workspace('legacy_owner');
     insert into public.signals(name, slug, description, is_builtin, workspace_id)
       values ('Invalid legacy builtin', 'invalid-legacy-builtin', 'test', true, w);
-    perform public.assign_legacy_workspace('legacy_owner', array['legacy_owner']);
+    perform public.assign_legacy_workspace('legacy_owner', array['legacy_owner'], true);
     raise exception 'invalid graph survived final validation';
   exception when check_violation then null;
   end;
@@ -39,7 +39,7 @@ do $$ declare report jsonb; w uuid; begin
     exists(select 1 from public.organizations where workspace_id is not null) then
     raise exception 'final validation did not roll back assignments and mode';
   end if;
-  w := public.assign_legacy_workspace('legacy_owner', array['legacy_owner']);
+  w := public.assign_legacy_workspace('legacy_owner', array['legacy_owner'], true);
   if exists(select 1 from public.organizations where workspace_id is distinct from w) then
     raise exception 'company not assigned';
   end if;
@@ -52,7 +52,7 @@ reset role;
 set local role authenticated;
 do $$ begin
   begin
-    perform public.assign_legacy_workspace('attacker', array['legacy_owner']);
+    perform public.assign_legacy_workspace('attacker', array['legacy_owner'], true);
     raise exception 'customer can assign legacy data';
   exception when insufficient_privilege then null;
   end;
