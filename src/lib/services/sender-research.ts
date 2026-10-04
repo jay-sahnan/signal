@@ -105,7 +105,7 @@ export function dedupeFacts(
 }
 
 /** Hostname of a profile URL, tolerating a missing protocol. Null if unparseable. */
-function hostOf(url: string): string | null {
+export function hostOf(url: string): string | null {
   try {
     return new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname;
   } catch {
