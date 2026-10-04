@@ -154,3 +154,28 @@ it("does not return a checkout URL if its durable claim changed", async () => {
   h.save.mockResolvedValue({ data: [], error: null });
   await expect(beginCheckout(account)).rejects.toThrow("Checkout changed");
 });
+it("recovers an existing checkout from later history pages", async () => {
+  h.sessions
+    .mockResolvedValueOnce({
+      data: [{ ...session, id: "cs_older", client_reference_id: "old-key" }],
+      has_more: true,
+    })
+    .mockResolvedValueOnce({ data: [session], has_more: false });
+  expect(await beginCheckout(account)).toBe(session.url);
+  expect(h.sessions).toHaveBeenLastCalledWith({
+    customer: "cus_owned",
+    limit: 100,
+    starting_after: "cs_older",
+  });
+  expect(h.create).not.toHaveBeenCalled();
+});
+it("creates a fresh checkout after searching every historical page", async () => {
+  h.sessions
+    .mockResolvedValueOnce({
+      data: [{ ...session, id: "cs_older", client_reference_id: "old-key" }],
+      has_more: true,
+    })
+    .mockResolvedValueOnce({ data: [], has_more: false });
+  expect(await beginCheckout(account)).toBe(session.url);
+  expect(h.create).toHaveBeenCalledOnce();
+});

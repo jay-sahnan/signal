@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { BillingRequestError } from "./account";
 import { billingConfig } from "./config";
+import { findCheckoutSession } from "./checkout-history";
 import { ensureBillingCustomer } from "./customer";
 import { getStripe } from "./stripe";
 import { reconcileCustomer } from "./subscriptions";
@@ -56,13 +57,7 @@ export async function beginCheckout(account: {
     if (!session) {
       // Recover a successful Stripe creation even if saving its ID failed, including
       // retries after Stripe's 24-hour idempotency retention window.
-      const sessions = await stripe.checkout.sessions.list({
-        customer,
-        limit: 100,
-      });
-      session =
-        sessions.data.find((s) => s.client_reference_id === key) ?? null;
-      if (!session && sessions.has_more) throw conflict();
+      session = await findCheckoutSession(customer, key);
     }
     if (session) {
       const sessionCustomer =
