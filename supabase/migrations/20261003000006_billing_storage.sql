@@ -20,7 +20,8 @@ create table public.workspace_billing (
   cancel_at_period_end boolean not null default false,
   sync_revision bigint not null default 0,
   reconciled_at timestamptz,
-  check (period_end is null or period_end > period_start)
+  check ((period_start is null and period_end is null) or
+    (period_start is not null and period_end is not null and period_end > period_start))
 );
 alter table public.workspace_billing enable row level security;
 revoke all on public.workspace_billing from public, anon, authenticated;
