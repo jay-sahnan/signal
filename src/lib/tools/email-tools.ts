@@ -805,7 +805,7 @@ async function inferPatternFromOrg(
 
 export const findEmail = tool({
   description:
-    "Find a contact's email address for free (pattern, web search, team pages) and store it as a suggestion; verification happens automatically when a send is attempted, Hosted research uses workspace lookup credits; reading an existing address does not. Returns the stored address if there is one. Pass revalidate: true only to force a paid re-verification now, e.g. after a send was refused because the address was proven dead.",
+    "Find a contact's email address using patterns, web search, and team pages, and store it as a suggestion. Hosted research uses workspace lookup credits; reading an existing address is free. Verification happens automatically when a send is attempted. Returns the stored address if there is one. Pass revalidate: true only to force a paid re-verification now, e.g. after a send was refused because the address was proven dead.",
   inputSchema: z.object({
     operationId: z
       .string()

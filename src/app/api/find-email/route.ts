@@ -1,3 +1,6 @@
+import { isHostedMode } from "@/lib/auth/workspace";
+import { runWithIdentity } from "@/lib/auth/identity";
+import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { NextResponse } from "next/server";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 import { findEmailForPerson } from "@/lib/tools/email-tools";
@@ -24,8 +27,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const personId = body.personId;
-  if (!personId) {
+  const personId = body?.personId;
+  if (typeof personId !== "string" || !personId.trim()) {
     return NextResponse.json({ error: "personId required" }, { status: 400 });
   }
 
@@ -48,8 +51,26 @@ export async function POST(req: Request) {
   // `revalidate` re-checks an address that is stored but unverified. Without it
   // the send gate's own advice ("run findEmail") could not be followed from the
   // UI, because findEmailForPerson short-circuits on any stored address.
-  const result = await findEmailForPerson(personId, {
-    revalidate: body.revalidate === true,
-  });
-  return NextResponse.json(result);
+  try {
+    const lookup = () =>
+      findEmailForPerson(personId, {
+        revalidate: body.revalidate === true,
+        operationKey: req.headers.get("Idempotency-Key"),
+      });
+    const result = isHostedMode()
+      ? await runWithIdentity({ userId: user.id, source: "web" }, lookup)
+      : await lookup();
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof CreditExecutionError)
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    console.error("[find-email] Lookup failed", error);
+    return NextResponse.json(
+      { error: "Email lookup failed. Retry the same request." },
+      { status: 500 },
+    );
+  }
 }

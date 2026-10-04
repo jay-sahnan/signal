@@ -1,6 +1,8 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { requestEmailLookup } from "@/lib/billing/email-lookup-request";
 import { AFFILIATION_SEND_THRESHOLD } from "@/lib/affiliation-threshold";
 import Image from "next/image";
 import {
@@ -77,6 +79,7 @@ export function CompaniesList({
   onDataChanged,
 }: CompaniesListProps) {
   const { openAgentWith } = useCampaign();
+  const { userId } = useAuth();
   const [expandedCompanyIds, setExpandedCompanyIds] = useState<Set<string>>(
     new Set(),
   );
@@ -291,24 +294,24 @@ export function CompaniesList({
     }
   };
 
-  const findEmailForContact = async (contact: CampaignContact) => {
+  const findEmailForContact = async (
+    contact: CampaignContact,
+    newAttempt = false,
+  ) => {
     setFindingEmailIds((prev) => new Set(prev).add(contact.id));
     try {
-      const res = await apiFetch("/api/find-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ personId: contact.person_id }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        toast.error(body?.error ?? "Could not look up an address.");
-        return;
-      }
+      await requestEmailLookup(userId, contact.person_id, newAttempt);
       onDataChanged();
     } catch (err) {
       console.error(`[find-email] Failed:`, err);
+      toast.error(err instanceof Error ? err.message : "Email lookup failed.", {
+        description:
+          "Retry keeps the same request. Starting a new lookup can use additional credits; previous work may still be reserved.",
+        action: {
+          label: "New lookup",
+          onClick: () => void findEmailForContact(contact, true),
+        },
+      });
     } finally {
       setFindingEmailIds((prev) => {
         const next = new Set(prev);
