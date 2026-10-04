@@ -80,13 +80,13 @@ export async function executeWithCredits<T>(
     result: T;
   };
   if (op.state === "succeeded") {
-    const replay = await db.rpc("read_credit_result", {
+    const replay = await db.rpc("read_serialized_credit_result", {
       p_id: op.id,
       p_user: identity.userId,
     });
     if (replay.error)
       throw new Error("Credit result unavailable; retry with the same key");
-    return replay.data as T;
+    return JSON.parse(replay.data as string) as T;
   }
   if (op.state !== "reserved")
     throw new CreditExecutionError(
@@ -111,11 +111,11 @@ export async function executeWithCredits<T>(
     // Large research responses live separately from the compact credit ledger.
     if (serialized === undefined || Buffer.byteLength(serialized) > 1_000_000)
       throw new Error("Credit result requires a durable reference");
-    const settled = await db.rpc("finish_credit_result", {
+    const settled = await db.rpc("finish_serialized_credit_result", {
       p_id: op.id,
       p_user: identity.userId,
       p_charged: op.credits,
-      p_result: JSON.parse(serialized),
+      p_result: serialized,
     });
     if (settled.error)
       throw new Error(
