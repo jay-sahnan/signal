@@ -10,8 +10,8 @@ vi.mock("@/lib/auth/workspace", () => ({
   isHostedMode: () => true,
   resolveWorkspace: h.resolve,
 }));
-vi.mock("@/lib/billing/config", () => ({
-  billingConfig: () => ({ origin: "https://signal.example" }),
+vi.mock("@/lib/billing/prepaid-config", () => ({
+  stripeConnectionConfig: () => ({ origin: "https://signal.example" }),
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   getAdminClient: () => ({ from: () => ({ select: () => ({ eq: h.eq }) }) }),

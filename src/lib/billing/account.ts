@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { isHostedMode, resolveWorkspace } from "@/lib/auth/workspace";
 import { getAdminClient } from "@/lib/supabase/admin";
-import { billingConfig } from "./config";
+import { stripeConnectionConfig } from "./prepaid-config";
 
 export class BillingRequestError extends Error {
   constructor(
@@ -16,7 +16,7 @@ export class BillingRequestError extends Error {
 export async function requireBillingOwner(request: Request) {
   if (!isHostedMode())
     throw new BillingRequestError("Billing unavailable", 404);
-  if (request.headers.get("origin") !== billingConfig().origin) {
+  if (request.headers.get("origin") !== stripeConnectionConfig().origin) {
     throw new BillingRequestError("Invalid request origin", 403);
   }
   const { userId } = await auth();

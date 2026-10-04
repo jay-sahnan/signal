@@ -4,8 +4,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({ process: vi.fn() }));
 vi.mock("@/lib/billing/events", () => ({ processBillingEvent: h.process }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => true }));
-vi.mock("@/lib/billing/config", () => ({
-  billingConfig: () => ({
+vi.mock("@/lib/billing/prepaid-config", () => ({
+  stripeConnectionConfig: () => ({
     secretKey: "sk_test_example",
     webhookSecret: "whsec_test",
   }),
