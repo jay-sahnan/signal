@@ -20,3 +20,4 @@ for test in supabase/tests/*.sql; do
   echo "Passed: $test"
 done
 bash supabase/tests/workspace-concurrency.sh "$container"
+bash supabase/tests/credit-concurrency.sh "$container"
