@@ -200,9 +200,9 @@ it("returns stalled company lookups without starting paid work", async () => {
   vi.useFakeTimers();
   h.stall = true;
   let settled = false;
-  const result = runWithIdentity({ userId: "owner", source: "mcp" }, () =>
+  const result = Promise.resolve(runWithIdentity({ userId: "owner", source: "mcp" }, () =>
     enrichCompanies.execute!({ companyIds: [ORG], operationId: key } as never, {} as never),
-  ).then((value) => { settled = true; return value; });
+  )).then((value) => { settled = true; return value; });
   await vi.advanceTimersByTimeAsync(5001);
   expect(settled).toBe(true);
   expect(await result).toMatchObject({ failed: 1, succeeded: 0 });
