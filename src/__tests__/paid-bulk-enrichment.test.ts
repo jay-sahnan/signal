@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  existing: vi.fn(),
   work: vi.fn(),
   recent: vi.fn(),
   filter: vi.fn(),
@@ -8,7 +9,7 @@ const h = vi.hoisted(() => ({
   rows: [] as unknown[],
 }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
-vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
+vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid, hasPaidAction: h.existing }));
 vi.mock("@/lib/services/person-enrichment", () => ({
   enrichPerson: h.work,
   PERSON_ENRICH_COLUMNS: "name",
@@ -51,6 +52,7 @@ const request = (personIds: unknown = [one], retryKey = key) =>
 beforeEach(() => {
   vi.resetAllMocks();
   h.hosted = true;
+  h.existing.mockResolvedValue(false);
   h.rows = [one, two].map((id) => ({
     person: { id, name: "Ada", organization_id: "org" },
   }));
@@ -119,4 +121,28 @@ it("preserves direct self-hosted execution", async () => {
   expect((await POST(request())).status).toBe(200);
   expect(h.paid).not.toHaveBeenCalled();
   expect(h.work).toHaveBeenCalled();
+});
+
+it("replays paid batch members even if their contact data is now recent", async () => {
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  const result = await POST(request());
+  expect(result.status).toBe(200);
+  expect((await result.json()).enriched).toBe(1);
+  expect(h.paid).toHaveBeenCalledTimes(1);
+  expect(h.existing.mock.calls[0][0]).toEqual(h.paid.mock.calls[0][0]);
+  expect(h.work).not.toHaveBeenCalled();
+});
+it("does not hide unresolved batch members as cached successes", async () => {
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  h.paid.mockRejectedValue(new CreditExecutionError("Unresolved", 409));
+  expect((await POST(request())).status).toBe(409);
+});
+
+it("checks existing batch outcomes even if a contact's sources were removed", async () => {
+  h.rows = [{ person: { id: one, name: "Unknown", organization_id: "org" } }];
+  h.existing.mockResolvedValue(true);
+  expect((await POST(request())).status).toBe(200);
+  expect(h.paid).toHaveBeenCalledTimes(1);
 });

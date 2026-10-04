@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isHostedMode } from "@/lib/auth/workspace";
-import { executePaidAction } from "@/lib/billing/paid-action";
+import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 import { toolOperationKey } from "@/lib/billing/tool-operation-key";
 import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { NextResponse } from "next/server";
@@ -136,11 +136,25 @@ async function enrichBatch(req: Request) {
     candidates.push({ id: person.id, person });
   }
 
+  const paidInputFor = (personId: string) => ({
+    identity: { userId: user.id, source: "web" as const },
+    kind: "contact.enrich.web",
+    key: hosted ? toolOperationKey("web", undefined, JSON.stringify([
+      batchKey!.toLowerCase(), campaignId, organizationId, personId,
+    ])) : null,
+    request: { personId },
+  });
+
   // Skip anyone already enriched recently. isRecentlyEnriched's default window
   // is 7 days, so genuinely stale data still refreshes rather than being
   // frozen forever by one old run.
+  const existingIds = new Set<string>();
   const fresh = await Promise.all(
-    candidates.map((c) => isRecentlyEnriched("people", c.id, 7, hosted)),
+    candidates.map(async (c) => {
+      const existing = hosted && await hasPaidAction(paidInputFor(c.id));
+      if (existing) existingIds.add(c.id);
+      return (await isRecentlyEnriched("people", c.id, 7, hosted)) && !existing;
+    }),
   );
   const pending = candidates.filter((_, i) => !fresh[i]);
   const alreadyEnriched = candidates.length - pending.length;
@@ -163,7 +177,7 @@ async function enrichBatch(req: Request) {
         const target = targets[index];
         try {
           if (
-            hosted &&
+            hosted && !existingIds.has(target.id) &&
             (!target.person.name || target.person.name === "Unknown") &&
             !target.person.linkedin_url &&
             !target.person.twitter_url
@@ -185,21 +199,7 @@ async function enrichBatch(req: Request) {
           };
           const result = hosted
             ? await executePaidAction(
-                {
-                  identity: { userId: user.id, source: "web" },
-                  kind: "contact.enrich.web",
-                  key: toolOperationKey(
-                    "web",
-                    undefined,
-                    JSON.stringify([
-                      batchKey!.toLowerCase(),
-                      campaignId,
-                      organizationId,
-                      target.id,
-                    ]),
-                  ),
-                  request: { personId: target.id },
-                },
+                paidInputFor(target.id),
                 work,
               )
             : await work();

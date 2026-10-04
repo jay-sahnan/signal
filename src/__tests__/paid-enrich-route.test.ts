@@ -1,13 +1,15 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  existing: vi.fn(),
   work: vi.fn(),
   recent: vi.fn(),
   hosted: true,
   owner: "owner",
+  name: "Ada",
 }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
-vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
+vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid, hasPaidAction: h.existing }));
 vi.mock("@/lib/services/person-enrichment", () => ({
   enrichPerson: h.work,
   PERSON_ENRICH_COLUMNS: "name",
@@ -28,7 +30,7 @@ vi.mock("@/lib/supabase/server", () => ({
           }),
           single: async () => ({
             data:
-              table === "people" ? { name: "Ada", enrichment_data: {} } : null,
+              table === "people" ? { name: h.name, enrichment_data: {} } : null,
           }),
         };
         return q;
@@ -50,7 +52,9 @@ const call = (body: unknown = { contactId: "link" }) =>
 beforeEach(() => {
   vi.resetAllMocks();
   h.hosted = true;
+  h.existing.mockResolvedValue(false);
   h.owner = "owner";
+  h.name = "Ada";
   h.recent.mockResolvedValue(false);
   h.work.mockResolvedValue({ status: "enriched", enrichmentData: {} });
   h.paid.mockResolvedValue({
@@ -108,4 +112,30 @@ it("preserves self-hosted direct execution", async () => {
 it.each([null, { contactId: 5 }])("rejects malformed input", async (body) => {
   expect((await call(body)).status).toBe(400);
   expect(h.work).not.toHaveBeenCalled();
+});
+
+it("returns the saved paid contact response after enrichment becomes recent", async () => {
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  expect(await (await call()).json()).toMatchObject({ enrichmentData: { cached: true } });
+  expect(h.paid).toHaveBeenCalledTimes(1);
+  expect(h.work).not.toHaveBeenCalled();
+});
+it("returns unresolved billing status even if contact data is recent", async () => {
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  h.paid.mockRejectedValue(new CreditExecutionError("Unresolved", 409));
+  expect((await call()).status).toBe(409);
+});
+
+it("replays original results even when mutable source fields were removed", async () => {
+  h.name = "Unknown";
+  h.existing.mockResolvedValue(true);
+  expect((await call()).status).toBe(200);
+  expect(h.paid).toHaveBeenCalledTimes(1);
+});
+it("still rejects new work without sources before reserving", async () => {
+  h.name = "Unknown";
+  expect((await call()).status).toBe(400);
+  expect(h.paid).not.toHaveBeenCalled();
 });
