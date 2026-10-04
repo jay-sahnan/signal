@@ -19,3 +19,4 @@ for test in supabase/tests/*.sql; do
   run_sql "$test"
   echo "Passed: $test"
 done
+bash supabase/tests/workspace-concurrency.sh "$container"
