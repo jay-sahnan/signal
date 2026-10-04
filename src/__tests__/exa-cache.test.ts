@@ -125,7 +125,10 @@ describe("Exa response cache", () => {
 });
 
 describe("hosted Exa cache isolation", () => {
-  beforeEach(() => vi.stubEnv("EXA_API_KEY", "test"));
+  beforeEach(() => {
+    vi.stubEnv("EXA_API_KEY", "test");
+    h.fail = false;
+  });
   afterEach(() => vi.unstubAllEnvs());
   it("requires trusted workspace context even for bypassed searches", async () => {
     vi.stubEnv("SIGNAL_DEPLOYMENT_MODE", "hosted");
