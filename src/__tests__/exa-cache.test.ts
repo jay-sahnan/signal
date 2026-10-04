@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   rows: new Map<string, { response: unknown; created_at: string }>(),
@@ -55,10 +55,12 @@ vi.mock("exa-js", () => ({
 }));
 
 import { EXA_CACHE_TTL_MS, exaCacheKey } from "@/lib/services/exa-cache";
+import { runWithIdentity } from "@/lib/auth/identity";
 import { ExaService } from "@/lib/services/exa-service";
 
 describe("Exa response cache", () => {
   beforeEach(() => {
+    vi.stubEnv("SIGNAL_DEPLOYMENT_MODE", "self-hosted");
     h.rows.clear();
     h.fail = false;
     h.exaCalls = 0;
@@ -119,5 +121,37 @@ describe("Exa response cache", () => {
     const res = await exa.search("no table", {});
     expect(res.results).toHaveLength(1);
     expect(h.exaCalls).toBe(1);
+  });
+});
+
+describe("hosted Exa cache isolation", () => {
+  beforeEach(() => vi.stubEnv("EXA_API_KEY", "test"));
+  afterEach(() => vi.unstubAllEnvs());
+  it("requires trusted workspace context even for bypassed searches", async () => {
+    vi.stubEnv("SIGNAL_DEPLOYMENT_MODE", "hosted");
+    const exa = new ExaService();
+    const before = h.exaCalls;
+    await expect(exa.search("private", { bypassCache: true })).rejects.toThrow(
+      "Workspace required",
+    );
+    expect(h.exaCalls).toBe(before);
+  });
+
+  it("separates cached and concurrent responses across workspaces", async () => {
+    vi.stubEnv("SIGNAL_DEPLOYMENT_MODE", "hosted");
+    h.rows.clear();
+    h.exaCalls = 0;
+    const exa = new ExaService();
+    const search = (workspaceId: string) =>
+      runWithIdentity({ userId: workspaceId, workspaceId, source: "web" }, () =>
+        exa.search("same customer research", {}),
+      );
+    await Promise.all([search("a"), search("b")]);
+    expect(h.exaCalls).toBe(2);
+    await search("a");
+    await search("b");
+    expect(h.exaCalls).toBe(2);
+    expect(h.rows.size).toBe(2);
+    vi.unstubAllEnvs();
   });
 });
