@@ -22,13 +22,13 @@ export const getSignalAuthoringGuide = tool({
 
 export const testSignalRecipe = tool({
   description:
-    "Test any signal -- built-in, custom, or recipe -- against a company. Returns the full SignalOutput (found, summary, evidence, data, diff, confidence). Works with hardcoded recipes (by slug), DB signals (by signalId or slug), and all execution types (exa_search, tool_call, browser_script). Does not write to signal_results.",
+    "Test any signal -- built-in, custom, or recipe -- against a company. Returns the full SignalOutput (found, summary, evidence, data, diff, confidence). Works with hardcoded recipes (by slug), DB signals (by signalId; built-ins also by slug), and all execution types (exa_search, tool_call, browser_script). Does not write to signal_results.",
   inputSchema: z.object({
     recipeSlug: z
       .string()
       .optional()
       .describe(
-        "Slug of a signal or recipe to test. Use '__list__' to see registered recipes.",
+        "Built-in recipe slug only. For customer signals use signalId. Use '__list__' to see registered recipes.",
       ),
     signalId: z
       .string()
@@ -96,7 +96,7 @@ export const testSignalRecipe = tool({
     }
 
     // Route 1: Hardcoded recipe (by slug)
-    if (input.recipeSlug && hasRecipe(input.recipeSlug)) {
+    if (!input.signalId && input.recipeSlug && hasRecipe(input.recipeSlug)) {
       const recipe = getRecipe(input.recipeSlug);
       const stepPreviews: Array<{ id: string; kind: string; preview: string }> =
         [];
@@ -140,8 +140,7 @@ export const testSignalRecipe = tool({
         .from("signals")
         .select("*")
         .eq("slug", input.recipeSlug)
-        .order("is_builtin", { ascending: false })
-        .limit(1)
+        .eq("is_builtin", true)
         .maybeSingle();
       signal = data as Signal | null;
     }
