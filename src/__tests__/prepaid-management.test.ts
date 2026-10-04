@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   auth: vi.fn(),
+  config: vi.fn(),
   owner: vi.fn(),
   rpc: vi.fn(),
   find: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock("@/lib/billing/account", async (original) => ({
   requireBillingOwner: h.owner,
 }));
 vi.mock("@/lib/billing/prepaid-config", () => ({
-  prepaidConfig: () => ({ credits: 100 }),
+  prepaidConfig: h.config,
   stripeConnectionConfig: () => ({ origin: "https://signal.test" }),
 }));
 vi.mock("@/lib/billing/checkout-history", () => ({
@@ -68,6 +69,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   h.queries = [];
   h.order = null;
+  h.config.mockReturnValue({ credits: 100 });
   h.auth.mockResolvedValue({ userId: "member" });
   h.owner.mockResolvedValue({ workspaceId: "trusted", userId: "owner" });
   h.rpc.mockResolvedValue({
@@ -139,5 +141,17 @@ it("keeps the pending purchase quantity distinct from a changed pack", async () 
   expect(await prepaidStatus()).toMatchObject({
     packCredits: 100,
     pendingCredits: 75,
+  });
+});
+
+it("keeps the wallet readable when checkout configuration is unavailable", async () => {
+  h.config.mockImplementation(() => {
+    throw new Error("Missing pack config");
+  });
+  await expect(prepaidStatus()).resolves.toMatchObject({
+    available: 50,
+    reserved: 20,
+    spent: 30,
+    packCredits: null,
   });
 });

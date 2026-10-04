@@ -57,6 +57,12 @@ export async function prepaidStatus() {
     )
   )
     throw new Error("Credit balance unavailable");
+  let packCredits: number | null = null;
+  try {
+    packCredits = prepaidConfig().credits;
+  } catch {
+    // Existing balances remain available while checkout configuration is repaired.
+  }
   return {
     available: totals.available,
     reserved: totals.reserved,
@@ -66,7 +72,7 @@ export async function prepaidStatus() {
     riskHold: Boolean(account?.risk_hold),
     pendingPurchase: Boolean(pending),
     pendingCredits: pending ? Number(pending.credits) : null,
-    packCredits: prepaidConfig().credits,
+    packCredits,
   };
 }
 export async function refreshPrepaidBilling(request: Request): Promise<void> {
