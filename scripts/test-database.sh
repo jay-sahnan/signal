@@ -21,3 +21,4 @@ for test in supabase/tests/*.sql; do
 done
 bash supabase/tests/workspace-concurrency.sh "$container"
 bash supabase/tests/credit-concurrency.sh "$container"
+bash supabase/tests/purchase-concurrency.sh "$container"
