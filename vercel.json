@@ -3,6 +3,10 @@
     {
       "path": "/api/jobs/tick",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/billing/reconcile",
+      "schedule": "* * * * *"
     }
   ]
 }
