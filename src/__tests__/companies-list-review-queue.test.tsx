@@ -232,6 +232,7 @@ describe("<CompaniesList> review queue", () => {
 describe("<CompaniesList> bulk find emails", () => {
   afterEach(() => {
     cleanup();
+    sessionStorage.clear();
     vi.mocked(apiFetch).mockReset();
     vi.mocked(toast.success).mockReset();
     vi.mocked(toast.error).mockReset();
@@ -296,7 +297,12 @@ describe("<CompaniesList> bulk find emails", () => {
     fireEvent.click(screen.getByTitle(/Find emails for/));
 
     await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith("database is on fire"),
+      expect(toast.error).toHaveBeenCalledWith(
+        "database is on fire",
+        expect.objectContaining({
+          action: expect.objectContaining({ label: "New batch" }),
+        }),
+      ),
     );
     expect(toast.success).not.toHaveBeenCalled();
   });

@@ -1,3 +1,8 @@
+import { z } from "zod";
+import { isHostedMode } from "@/lib/auth/workspace";
+import { runWithIdentity } from "@/lib/auth/identity";
+import { toolOperationKey } from "@/lib/billing/tool-operation-key";
+import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { NextResponse } from "next/server";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 import { AFFILIATION_SEND_THRESHOLD } from "@/lib/services/affiliation";
@@ -28,23 +33,46 @@ export async function POST(req: Request) {
   }
   const { supabase, user } = ctx;
 
-  let body: { campaignId?: string; organizationId?: string };
+  let body: {
+    campaignId?: string;
+    organizationId?: string;
+    personIds?: string[];
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { campaignId, organizationId } = body;
-  if (!campaignId) {
+  const { campaignId, organizationId } = body ?? {};
+  if (typeof campaignId !== "string" || !campaignId) {
     return NextResponse.json({ error: "campaignId required" }, { status: 400 });
   }
-  if (!organizationId) {
+  if (typeof organizationId !== "string" || !organizationId) {
     return NextResponse.json(
       { error: "organizationId required (one company per request)" },
       { status: 400 },
     );
   }
+
+  const hosted = isHostedMode();
+  const batchKey = req.headers.get("Idempotency-Key");
+  const selected = z
+    .array(z.string().uuid())
+    .min(1)
+    .max(MAX_TARGETS_PER_REQUEST)
+    .refine((ids) => new Set(ids).size === ids.length)
+    .safeParse(body.personIds);
+  if (
+    (hosted && !z.string().uuid().safeParse(batchKey).success) ||
+    ((hosted || body.personIds !== undefined) && !selected.success)
+  ) {
+    return NextResponse.json(
+      { error: "A valid retry key and 1–50 unique contact IDs are required." },
+      { status: 400 },
+    );
+  }
+  const selectedIds = selected.success ? new Set(selected.data) : null;
 
   // Ownership check on the campaign.
   const { data: campaign } = await supabase
@@ -58,12 +86,17 @@ export async function POST(req: Request) {
 
   // Pull every campaign_person → person where work_email is missing, scoped
   // to the requested organization.
-  const { data: rows, error } = await supabase
+  let query = supabase
     .from("campaign_people")
     .select(
       "person:people!inner(id, work_email, organization_id, affiliation_confidence)",
     )
     .eq("campaign_id", campaignId);
+  if (selectedIds)
+    query = query
+      .in("person_id", [...selectedIds])
+      .eq("person.organization_id", organizationId);
+  const { data: rows, error } = await query;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -79,7 +112,7 @@ export async function POST(req: Request) {
       affiliation_confidence: number | null;
     } | null;
     if (!person) continue;
-    if (person.work_email) continue;
+    if (!selectedIds && person.work_email) continue;
     if (person.organization_id !== organizationId) continue;
     // A firstname@company.com address reads to the user as proof of
     // employment, so minting one for a contact we cannot place at the company
@@ -92,6 +125,7 @@ export async function POST(req: Request) {
       skipped++;
       continue;
     }
+    if (selectedIds && !selectedIds.has(person.id)) continue;
     pendingTotal++;
     if (targets.length < MAX_TARGETS_PER_REQUEST) {
       targets.push(person.id);
@@ -104,7 +138,26 @@ export async function POST(req: Request) {
 
   for (const personId of targets) {
     try {
-      const result = await findEmailForPerson(personId);
+      const lookup = () =>
+        !hosted
+          ? findEmailForPerson(personId)
+          : findEmailForPerson(personId, {
+              operationKey: batchKey
+                ? toolOperationKey(
+                    "web",
+                    undefined,
+                    JSON.stringify([
+                      batchKey.toLowerCase(),
+                      campaignId,
+                      organizationId,
+                      personId,
+                    ]),
+                  )
+                : null,
+            });
+      const result = hosted
+        ? await runWithIdentity({ userId: user.id, source: "web" }, lookup)
+        : await lookup();
       if (result.email) {
         found.push({
           personId,
@@ -115,6 +168,18 @@ export async function POST(req: Request) {
         notFound.push({ personId, reason: result.reason });
       }
     } catch (err) {
+      if (hosted)
+        return NextResponse.json(
+          {
+            error:
+              err instanceof CreditExecutionError
+                ? err.message
+                : "Email lookup failed. Retry the same batch.",
+            found,
+            notFound,
+          },
+          { status: err instanceof CreditExecutionError ? err.status : 500 },
+        );
       const msg = err instanceof Error ? err.message : "Unknown error";
       notFound.push({ personId, reason: msg });
     }
