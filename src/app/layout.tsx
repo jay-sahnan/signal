@@ -10,6 +10,7 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { MissingKeyBannerStack } from "@/components/missing-key-banner-stack";
 import { PostHogIdentify } from "@/components/posthog-identify";
 import { StreamingProvider } from "@/lib/streaming-context";
+import { WorkspaceBootstrap } from "@/components/workspace-bootstrap";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -35,14 +36,16 @@ export default function RootLayout({
             storageKey="signal-theme"
             disableTransitionOnChange
           >
-            <StreamingProvider>
-              <TooltipProvider>
-                <DashboardShell banner={<MissingKeyBannerStack />}>
-                  {children}
-                </DashboardShell>
-                <Toaster richColors />
-              </TooltipProvider>
-            </StreamingProvider>
+            <WorkspaceBootstrap>
+              <StreamingProvider>
+                <TooltipProvider>
+                  <DashboardShell banner={<MissingKeyBannerStack />}>
+                    {children}
+                  </DashboardShell>
+                  <Toaster richColors />
+                </TooltipProvider>
+              </StreamingProvider>
+            </WorkspaceBootstrap>
           </ThemeProvider>
         </ClerkProvider>
       </body>
