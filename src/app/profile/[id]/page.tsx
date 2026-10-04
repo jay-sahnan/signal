@@ -572,7 +572,7 @@ function FactBankSection({
     }
   };
 
-  const handleResearch = async () => {
+  const handleResearch = async (newAttempt = false) => {
     setResearching(true);
     setResearchNote(null);
     setResearchError(null);
@@ -580,7 +580,7 @@ function FactBankSection({
       if (!userId) throw new Error("Sign in before researching.");
       // Keep the same operation across retries and reloads until success.
       const storageKey = `signal:research:${userId}:${profileId}`;
-      let operationKey = sessionStorage.getItem(storageKey);
+      let operationKey = newAttempt ? null : sessionStorage.getItem(storageKey);
       if (!operationKey) {
         operationKey = crypto.randomUUID();
         sessionStorage.setItem(storageKey, operationKey);
@@ -633,7 +633,7 @@ function FactBankSection({
         <Button
           variant="outline"
           size="sm"
-          onClick={handleResearch}
+          onClick={() => void handleResearch()}
           disabled={researching}
         >
           {researching ? (
@@ -646,7 +646,24 @@ function FactBankSection({
       </div>
 
       {researchError && (
-        <p className="text-destructive text-sm">{researchError}</p>
+        <div className="space-y-2">
+          <p role="alert" className="text-destructive text-sm">
+            {researchError}
+          </p>
+          <p className="text-muted-foreground text-sm">
+            Retrying keeps your existing request. If you edited this profile or
+            want to try again as new work, start a new request. It can use
+            additional credits; any previous pending credits remain reserved.
+            Contact support to resolve a pending request.
+          </p>
+          <Button
+            variant="outline"
+            disabled={researching || !userId}
+            onClick={() => void handleResearch(true)}
+          >
+            Start a new research request
+          </Button>
+        </div>
       )}
       {researchNote && (
         <p className="text-muted-foreground text-sm">{researchNote}</p>
