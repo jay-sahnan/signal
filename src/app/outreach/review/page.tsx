@@ -1,5 +1,8 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
+import { requestContactEnrichment } from "@/lib/billing/contact-enrichment-request";
+
 import {
   Suspense,
   useCallback,
@@ -105,6 +108,7 @@ export default function ReviewPage() {
 }
 
 function ReviewPageInner() {
+  const { userId } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
   const sequenceId = searchParams.get("sequence");
@@ -462,7 +466,10 @@ function ReviewPageInner() {
   );
 
   const handleEnrich = useCallback(
-    async (contactId: string) => {
+    async function retryEnrichment(
+      contactId: string,
+      newAttempt = false,
+    ): Promise<void> {
       const personId = contactId;
       if (enrichingPersonIds.has(personId)) return;
 
@@ -476,23 +483,11 @@ function ReviewPageInner() {
       );
 
       try {
-        const res = await apiFetch("/api/enrich", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactId: personId }),
-        });
-        const result = await res.json();
-        if (!res.ok) {
-          toast.error(result.error ?? "Enrichment failed");
-          setDrafts((prev) =>
-            prev.map((d) =>
-              d.person_id === personId
-                ? { ...d, enrichment_status: "failed" }
-                : d,
-            ),
-          );
-          return;
-        }
+        const result = await requestContactEnrichment(
+          userId,
+          personId,
+          newAttempt,
+        );
 
         const enrichmentData = (result.enrichmentData ?? {}) as EnrichmentData;
         const status = (result.status ?? "enriched") as "enriched" | "failed";
@@ -516,7 +511,14 @@ function ReviewPageInner() {
           toast.success("Contact enriched");
         }
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Enrichment failed");
+        toast.error(err instanceof Error ? err.message : "Enrichment failed", {
+          description:
+            "Retry keeps the same request. New enrichment can use additional credits; previous work may still be reserved.",
+          action: {
+            label: "New enrichment",
+            onClick: () => void retryEnrichment(contactId, true),
+          },
+        });
         setDrafts((prev) =>
           prev.map((d) =>
             d.person_id === personId
@@ -532,7 +534,7 @@ function ReviewPageInner() {
         });
       }
     },
-    [enrichingPersonIds],
+    [enrichingPersonIds, userId],
   );
 
   const handleSendNow = useCallback(
