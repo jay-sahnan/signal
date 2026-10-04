@@ -1500,6 +1500,7 @@ export function summarizeCompanyEnrichment(
 async function enrichCompanyById(
   companyIdOrLinkId: string,
   campaignId?: string,
+  operationKey?: string | null,
 ): Promise<{
   companyId: string;
   companyName: string;
@@ -1512,14 +1513,46 @@ async function enrichCompanyById(
   const supabase = await createClient();
   const organizationId = await resolveOrganizationId(companyIdOrLinkId);
 
+  const hosted = isHostedMode();
+  const session = hosted ? await toolSession() : null;
+  let icp: Record<string, unknown> | null = null;
+  if (hosted) {
+    if (
+      !session ||
+      !(await callerHoldsOrganization(
+        session.supabase,
+        session.userId,
+        organizationId,
+      ))
+    )
+      throw new Error("Company not found");
+    if (campaignId) {
+      const { data: campaign, error } = await supabase
+        .from("campaigns")
+        .select("user_id, icp")
+        .eq("id", campaignId)
+        .single();
+      if (error || !campaign || campaign.user_id !== session.userId)
+        throw new Error("Campaign not found");
+      icp = (campaign.icp as Record<string, unknown>) || null;
+    }
+  }
+
   // Check recency -- skip if recently enriched
-  const recent = await isRecentlyEnriched("organizations", organizationId);
+  const recent = await isRecentlyEnriched(
+    "organizations",
+    organizationId,
+    7,
+    hosted,
+  );
   if (recent) {
-    const { data: org } = await supabase
+    const { data: org, error: cachedError } = await supabase
       .from("organizations")
       .select("name, domain, enrichment_data")
       .eq("id", organizationId)
       .single();
+    if (hosted && (cachedError || !org))
+      throw new Error("Could not read cached company enrichment");
     return {
       companyId: organizationId,
       companyName: org?.name || "Unknown",
@@ -1543,8 +1576,7 @@ async function enrichCompanyById(
     );
   }
 
-  let icp: Record<string, unknown> | null = null;
-  if (campaignId) {
+  if (campaignId && !hosted) {
     const { data: campaign } = await supabase
       .from("campaigns")
       .select("icp")
@@ -1553,6 +1585,27 @@ async function enrichCompanyById(
     icp = (campaign?.icp as Record<string, unknown>) || null;
   }
 
+  const research = () => researchCompany(organizationId, org, icp);
+  if (!hosted) return research();
+  return executePaidAction(
+    {
+      identity: getCurrentIdentity() ?? {
+        userId: session!.userId,
+        source: "web",
+      },
+      key: operationKey ?? null,
+      kind: "company.enrich",
+      request: { organizationId, campaignId: campaignId ?? null },
+    },
+    research,
+  );
+}
+
+async function researchCompany(
+  organizationId: string,
+  org: Record<string, unknown>,
+  icp: Record<string, unknown> | null,
+) {
   const exa = new ExaService();
   const extractor = new WebExtractionService();
   const errors: string[] = [];
@@ -1708,6 +1761,9 @@ async function enrichCompanyById(
         }
       : null;
 
+  if (isHostedMode() && !searches.length && !enrichmentData.website && !careers)
+    throw new Error("All company enrichment sources failed");
+
   const extracted = await extractClaims({
     companyName: org.name as string,
     companyDomain,
@@ -1757,8 +1813,13 @@ async function enrichCompanyById(
 
 export const enrichCompany = tool({
   description:
-    "Deeply research a single company and write results to the DB. Returns a THIN summary (counts of searches by category, has-website flag) -- NOT the raw enrichment payload. To read the actual enrichment (website content, Exa results), call getCompanyDetail(organizationId). For multiple companies use enrichCompanies. Skips if recently enriched (<7 days).",
+    "Deeply research a single company and write results to the DB. Returns a THIN summary (counts of searches by category, has-website flag) -- NOT the raw enrichment payload. To read the actual enrichment (website content, Exa results), call getCompanyDetail(organizationId). For multiple companies use enrichCompanies. Skips if recently enriched (<7 days). Hosted company.enrich credits cover the full research run, including partial results; cached enrichment is free.",
   inputSchema: z.object({
+    operationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe("Hosted MCP: new UUID for new research; reuse it on retries."),
     companyId: z
       .string()
       .uuid()
@@ -1775,14 +1836,27 @@ export const enrichCompany = tool({
       .optional()
       .describe("Campaign ID to load ICP context for scoring."),
   }),
-  execute: async (input) =>
-    enrichCompanyById(input.companyId, input.campaignId),
+  execute: async (input, opts) =>
+    enrichCompanyById(
+      input.companyId,
+      input.campaignId,
+      toolOperationKey(
+        getCurrentIdentity()?.source ?? "web",
+        input.operationId,
+        opts?.toolCallId,
+      ),
+    ),
 });
 
 export const enrichCompanies = tool({
   description:
-    "Deeply research multiple companies IN PARALLEL. Much faster than calling enrichCompany one by one. Skips any organization recently enriched (within 7 days).",
+    "Deeply research multiple companies IN PARALLEL. Much faster than calling enrichCompany one by one. Skips any organization recently enriched (within 7 days). Hosted credits are charged per researched company, including partial results; cached enrichment is free.",
   inputSchema: z.object({
+    operationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe("Hosted MCP: new UUID for new research; reuse it on retries."),
     companyIds: z
       .array(z.string().uuid())
       .min(1)
@@ -1802,8 +1876,13 @@ export const enrichCompanies = tool({
       .optional()
       .describe("Campaign ID to load ICP context for scoring."),
   }),
-  execute: async (input, { experimental_context }) => {
-    const deadlineAt = deadlineFrom(experimental_context);
+  execute: async (input, opts) => {
+    const deadlineAt = deadlineFrom(opts?.experimental_context);
+    const batchKey = toolOperationKey(
+      getCurrentIdentity()?.source ?? "web",
+      input.operationId,
+      opts?.toolCallId,
+    );
     const succeeded: Array<{
       companyId: string;
       companyName: string;
@@ -1832,7 +1911,13 @@ export const enrichCompanies = tool({
       const results = await Promise.allSettled(
         chunk.map((id) =>
           withTimeout(
-            enrichCompanyById(id, input.campaignId),
+            enrichCompanyById(
+              id,
+              input.campaignId,
+              batchKey
+                ? toolOperationKey("web", undefined, `${batchKey}:${id}`)
+                : null,
+            ),
             PER_COMPANY_TIMEOUT_MS,
             `Enrich company ${id}`,
           ),
