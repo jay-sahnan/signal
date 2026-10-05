@@ -178,12 +178,18 @@ export const researchSenderProfile = tool({
         };
       },
     );
-    if (identity.source === "web" && getWebBillingTurn()
+    const legacyRevision = requestHash({ urls: urls.map(url => url ?? null), name: profile.name ?? null });
+    const historical = !outcome.sourceRevision || outcome.sourceRevision === legacyRevision;
+    if (identity.source === "web" && getWebBillingTurn() && !historical
       && outcome.sourceRevision !== sourceRevision) return {
       error: "Saved research does not match the current profile sources. Send a new message to research the updated profile. No additional credits were charged.",
     };
     const response = { ...outcome };
     delete response.sourceRevision;
+    if (identity.source === "web" && getWebBillingTurn() && historical) return {
+      ...response,
+      warning: "This is previously saved research, replayed without additional credits. Its source snapshot cannot verify every current profile field; treat these facts as historical rather than freshly researched.",
+    };
     return response;
   },
 });
