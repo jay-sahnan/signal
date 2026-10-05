@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const h = vi.hoisted(() => ({ hosted: true, owner: "owner", links: [] as Array<{ id: string; person: { enrichment_status: string; name: string } }>, paid: vi.fn(), model: vi.fn(), writes: vi.fn(), profile: vi.fn() }));
+const h = vi.hoisted(() => ({ hosted: true, owner: "owner", links: [] as Array<{ id: string; person: { enrichment_status: string; name: string } }>, paid: vi.fn(), model: vi.fn(), writes: vi.fn(), selection: vi.fn(), profile: vi.fn() }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
 vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
 vi.mock("@/lib/profile", () => ({ getProfileForPrompt: h.profile }));
@@ -9,7 +9,7 @@ vi.mock("@/lib/services/cost-tracker", () => ({ withAction: (_label: string, wor
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAndUser: async () => ({ user: { id: "owner" }, supabase: { from: (table: string) => {
   let writing = false;
   const filters: Record<string, unknown> = {};
-  const q = { select: () => q, eq: (name: string, value: unknown) => { filters[name] = value; return q; }, in: () => q,
+  const q = { select: () => q, eq: (name: string, value: unknown) => { filters[name] = value; return q; }, in: (column: string, ids: string[]) => { h.selection(column, ids); return q; },
     update: (value: unknown) => { writing = true; h.writes(value); return q; },
     single: async () => ({ data: { user_id: h.owner, name: "Campaign", icp: {}, offering: {} }, error: null }),
     then: (resolve: (value: unknown) => unknown) => resolve(writing ? { data: h.writes.mock.results.at(-1)?.value === false ? [] : [{ id: filters.id }], error: null }
@@ -69,6 +69,12 @@ it("throws from paid work when persistence fails instead of settling success", a
 it("preserves self-hosted scoring without prepaid billing", async () => {
   h.hosted = false;
   expect(await (await call()).json()).toMatchObject({ scored: 1 }); expect(h.paid).not.toHaveBeenCalled();
+  expect(h.selection).toHaveBeenCalledWith("id", [id]);
+});
+it("retains legacy self-hosted requests without a selection", async () => {
+  h.hosted = false;
+  const response = await POST(new Request("https://signal.test", { method: "POST", body: JSON.stringify({ campaignId: "campaign" }) }));
+  expect(await response.json()).toMatchObject({ scored: 1 }); expect(h.selection).not.toHaveBeenCalled(); expect(h.paid).not.toHaveBeenCalled();
 });
 it("binds a canonical contact selection and charges per selected contact", async () => {
   h.links.push({ id: other, person: { enrichment_status: "enriched", name: "Bob" } });
