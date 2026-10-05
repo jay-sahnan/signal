@@ -55,6 +55,9 @@ function SignalsPageContent() {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>(
     initialCampaignId ?? "",
   );
+  const [toggleLoadError, setToggleLoadError] = useState(false);
+  const toggleReadVersion = useRef(0);
+  const [togglesReadyFor, setTogglesReadyFor] = useState<string | null>(null);
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>({});
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
@@ -100,7 +103,10 @@ function SignalsPageContent() {
   }, []);
 
   const fetchToggles = useCallback(async (campaignId: string) => {
+    const readVersion = ++toggleReadVersion.current;
+    setToggleLoadError(false);
     togglesRequestRef.current = campaignId;
+    setTogglesReadyFor(null);
     if (!campaignId) {
       setEnabledMap({});
       return;
@@ -113,10 +119,11 @@ function SignalsPageContent() {
     if (!mountedRef.current) return;
     // A stale response (user already switched campaigns) must not paint the
     // previous campaign's toggle state under the new selection.
-    if (togglesRequestRef.current !== campaignId) return;
+    if (togglesRequestRef.current !== campaignId || readVersion !== toggleReadVersion.current) return;
     if (error) {
       // Leave the map alone: rendering every toggle off would invite the
       // user to "re-enable" signals that are already on.
+      setToggleLoadError(true);
       toast.error(`Could not load signal toggles: ${error.message}`);
       return;
     }
@@ -127,6 +134,7 @@ function SignalsPageContent() {
       ).enabled as boolean;
     }
     setEnabledMap(map);
+    setTogglesReadyFor(campaignId);
   }, []);
 
   const isOwned = useCallback(
@@ -152,7 +160,7 @@ function SignalsPageContent() {
   }, [selectedCampaignId, fetchToggles]);
 
   const handleToggle = async (signalId: string, enabled: boolean) => {
-    if (!selectedCampaignId) return;
+    if (!selectedCampaignId || togglesReadyFor !== selectedCampaignId) return;
     setEnabledMap((prev) => ({ ...prev, [signalId]: enabled }));
     const supabase = createClient();
     const { data: link, error } = await setCampaignSignal(supabase, selectedCampaignId, signalId, enabled);
@@ -286,6 +294,12 @@ function SignalsPageContent() {
 
         <Separator />
 
+        {selectedCampaignId && togglesReadyFor !== selectedCampaignId && (
+          <div role="status" className="text-muted-foreground text-sm">
+            {toggleLoadError ? <Button variant="outline" size="sm" onClick={() => fetchToggles(selectedCampaignId)}>Retry loading campaign signals</Button>
+              : "Loading campaign signal settings…"}
+          </div>
+        )}
         {/* Category filter */}
         <div className="flex flex-wrap gap-1.5">
           {CATEGORIES.map((cat) => (
@@ -336,7 +350,7 @@ function SignalsPageContent() {
                 signal={signal}
                 variant="card"
                 enabled={enabledMap[signal.id] ?? false}
-                showToggle={!!selectedCampaignId}
+                showToggle={!!selectedCampaignId && togglesReadyFor === selectedCampaignId}
                 onToggle={handleToggle}
                 onClick={setDetailSignal}
               />
