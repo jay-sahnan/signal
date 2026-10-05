@@ -1,3 +1,4 @@
+import { isHostedMode } from "@/lib/auth/workspace";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { parseLinkedInTitle } from "@/lib/utils";
@@ -86,6 +87,9 @@ export interface ExistingContact {
 }
 
 export interface ContactDiscoveryResult {
+  /** Set only by pre-provider validation; never inferred from an empty search. */
+  noBillableWork?: true;
+  sourcesSucceeded: number;
   organizationId: string;
   companyName: string;
   contacts: DiscoveredContact[];
@@ -206,6 +210,8 @@ export async function findContactsForOrganization(
   }
 
   const empty = (error: string): ContactDiscoveryResult => ({
+    noBillableWork: true,
+    sourcesSucceeded: 0,
     organizationId,
     companyName: org.name,
     contacts: [],
@@ -313,9 +319,10 @@ export async function findContactsForOrganization(
   // ── Phase 1: the company's own website ──────────────────────────────────
   // Strongest routine evidence there is: the company published these people as
   // its own staff.
+  let domainSourceSucceeded = false;
   if (org.domain) {
     try {
-      const domainPeople = await findPeopleOnDomain(org.domain, org.name);
+      const domainPeople = await findPeopleOnDomain(org.domain, org.name, { strict: isHostedMode() });
       for (const dp of domainPeople) {
         const linkedinUrl = dp.linkedinUrl
           ? normalizeLinkedInUrl(dp.linkedinUrl)
@@ -395,6 +402,7 @@ export async function findContactsForOrganization(
             : unchangedEvidence(write.reason, evidence),
         });
       }
+      domainSourceSucceeded = true;
     } catch (err) {
       console.error("[contact-discovery] Domain scrape failed:", err);
     }
@@ -619,6 +627,7 @@ export async function findContactsForOrganization(
   }
 
   return {
+    sourcesSucceeded: Number(domainSourceSucceeded) + searchResults.filter(search => !("error" in search)).length,
     organizationId,
     companyName: org.name,
     contacts,

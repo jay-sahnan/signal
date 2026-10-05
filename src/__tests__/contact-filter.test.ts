@@ -83,7 +83,7 @@ function reply(judged: unknown[]) {
   });
 }
 
-beforeEach(() => generateObjectMock.mockReset());
+beforeEach(() => { generateObjectMock.mockReset(); });
 
 describe("filterContactsByCompany", () => {
   it("returns a verdict for every candidate", async () => {
@@ -426,4 +426,16 @@ describe("findPeopleOnDomain page discovery", () => {
     ]);
     quiet.mockRestore();
   });
+});
+
+it("surfaces failed page extraction in strict accounting mode", async () => {
+  fetchMock.mockResolvedValue({ ok: false });
+  extractMock.mockResolvedValue({ success: false });
+  await expect(findPeopleOnDomain("acme.com", "Acme", { strict: true })).rejects.toThrow("Domain pages unavailable");
+});
+it("surfaces failed people extraction in strict accounting mode", async () => {
+  fetchMock.mockResolvedValue({ ok: false });
+  extractMock.mockResolvedValue({ success: true, url: "https://acme.com/team", data: { content: "team ".repeat(100) } });
+  generateObjectMock.mockRejectedValue(new Error("Extraction unavailable"));
+  await expect(findPeopleOnDomain("acme.com", "Acme", { strict: true })).rejects.toThrow("Extraction unavailable");
 });

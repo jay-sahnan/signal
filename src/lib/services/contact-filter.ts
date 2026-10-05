@@ -152,6 +152,7 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
 export async function findPeopleOnDomain(
   domain: string,
   orgName: string,
+  options: { strict?: boolean } = {},
 ): Promise<DomainPerson[]> {
   const extractor = new WebExtractionService();
   const scrapedContent: Array<{ url: string; content: string }> = [];
@@ -192,12 +193,14 @@ export async function findPeopleOnDomain(
 
   // Step 2: Fetch matching URLs (cap at 4 to avoid spraying requests)
   const toFetch = urlsToTry.slice(0, 4);
+  let fetchedSuccessfully = false;
   const results = await Promise.allSettled(
     toFetch.map(async (url) => {
       const result = await extractor.extract(url, {
         includeLinks: false,
         timeout: 8000,
       });
+      if (result.success && !result.url.includes("/404")) fetchedSuccessfully = true;
       if (
         result.success &&
         result.data.content.length > 200 &&
@@ -215,7 +218,10 @@ export async function findPeopleOnDomain(
     }
   }
 
-  if (scrapedContent.length === 0) return [];
+  if (scrapedContent.length === 0) {
+    if (options.strict && !fetchedSuccessfully) throw new Error("Domain pages unavailable");
+    return [];
+  }
 
   // Use Haiku to extract people from the scraped content
   const combinedContent = scrapedContent
@@ -284,6 +290,7 @@ ${wrapUntrusted(combinedContent.slice(0, 12000))}`,
     return object.people;
   } catch (err) {
     console.error("[contact-filter] Domain people extraction failed:", err);
+    if (options.strict) throw err;
     return [];
   }
 }
