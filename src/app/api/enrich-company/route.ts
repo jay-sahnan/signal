@@ -1,3 +1,6 @@
+import { isHostedMode } from "@/lib/auth/workspace";
+import { executePaidAction } from "@/lib/billing/paid-action";
+import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { withAction } from "@/lib/services/cost-tracker";
 import { createClient, getSupabaseAndUser } from "@/lib/supabase/server";
 import {
@@ -37,21 +40,26 @@ async function getActiveSignalSlugs(
   const supabase = await createClient();
 
   // Check if any campaign_signals records exist at all
-  const { data: allSignals } = await supabase
+  const { data: allSignals, error: allSignalsError } = await supabase
     .from("campaign_signals")
     .select("id")
     .eq("campaign_id", campaignId)
     .limit(1);
 
+  if (isHostedMode() && allSignalsError)
+    throw new Error("Could not read campaign signals");
+
   // No signal config at all -- run everything (not configured yet)
   if (!allSignals || allSignals.length === 0) return null;
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("campaign_signals")
     .select("signal_id, signals(slug)")
     .eq("campaign_id", campaignId)
     .eq("enabled", true);
 
+  if (isHostedMode() && error)
+    throw new Error("Could not read enabled signals");
   if (!data) return new Set();
   return new Set(
     data
@@ -64,6 +72,20 @@ async function getActiveSignalSlugs(
 }
 
 export async function POST(request: Request) {
+  try {
+    return await enrichRequest(request);
+  } catch (error) {
+    if (error instanceof CreditExecutionError)
+      return Response.json({ error: error.message }, { status: error.status });
+    console.error("[enrich-company] Request failed", error);
+    return Response.json(
+      { error: "Company enrichment failed. Retry the same request." },
+      { status: 500 },
+    );
+  }
+}
+
+async function enrichRequest(request: Request) {
   const ctx = await getSupabaseAndUser();
   if (!ctx) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -77,11 +99,16 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { companyId, campaignId } = body as {
+  const { companyId, campaignId } = (body ?? {}) as {
     companyId: string;
     campaignId?: string;
   };
-  if (!companyId) {
+  if (
+    typeof companyId !== "string" ||
+    !companyId.trim() ||
+    (campaignId !== undefined &&
+      (typeof campaignId !== "string" || !campaignId.trim()))
+  ) {
     return Response.json({ error: "companyId is required" }, { status: 400 });
   }
 
@@ -133,6 +160,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  if (isHostedMode() && campaignId && campaignId !== link.campaign_id)
+    return Response.json(
+      { error: "Company does not belong to the requested campaign" },
+      { status: 400 },
+    );
+
   if (!link.organization) {
     return Response.json(
       { error: "Organization data missing" },
@@ -153,14 +186,47 @@ export async function POST(request: Request) {
     ? await getActiveSignalSlugs(effectiveCampaignId)
     : null; // null = run all (no campaign context)
 
-  return enrichOrganization(
-    org,
-    orgId,
-    activeSlugs,
-    user.id,
-    effectiveCampaignId,
-    companyId,
+  if (!isHostedMode()) {
+    return enrichOrganization(
+      org,
+      orgId,
+      activeSlugs,
+      user.id,
+      effectiveCampaignId,
+      companyId,
+    );
+  }
+  const recent = await isRecentlyEnriched("organizations", orgId, 7, true);
+  // Without a domain there is no contact-discovery work to run on a cached profile.
+  if (recent && !org.domain)
+    return Response.json({
+      companyId: orgId,
+      enrichmentData: org.enrichment_data,
+      skipped: true,
+      contactsFound: 0,
+    });
+  const result = await executePaidAction(
+    {
+      identity: { userId: user.id, source: "web" },
+      key: request.headers.get("Idempotency-Key"),
+      kind: "company.enrich.web",
+      request: { organizationId: orgId, campaignId: effectiveCampaignId },
+    },
+    async () => {
+      const response = await enrichOrganization(
+        org,
+        orgId,
+        activeSlugs,
+        user.id,
+        effectiveCampaignId,
+        companyId,
+        recent,
+      );
+      if (!response.ok) throw new Error("Company research failed");
+      return response.json();
+    },
   );
+  return Response.json(result);
 }
 
 /**
@@ -177,12 +243,14 @@ async function findContactsForCompany(
 ): Promise<{ totalFound: number }> {
   const supabase = await createClient();
 
-  const { data: campaign } = await supabase
+  const { data: campaign, error: campaignError } = await supabase
     .from("campaigns")
     .select("icp")
     .eq("id", campaignId)
     .single();
 
+  if (isHostedMode() && campaignError)
+    throw new Error("Could not read contact discovery settings");
   const icp = campaign?.icp as Record<string, unknown> | null;
   const targetTitles = (icp?.targetTitles as string[] | undefined) || [];
   // Bound to avoid per-user Exa spend blowouts.
@@ -196,10 +264,12 @@ async function findContactsForCompany(
       numResults: 3,
     });
     if (result.error) {
+      if (isHostedMode()) throw new Error(result.error);
       console.warn(`[enrich-company] ${company.name}: ${result.error}`);
     }
     return { totalFound: result.totalFound };
   } catch (err) {
+    if (isHostedMode()) throw err;
     console.error("[enrich-company] contact discovery failed:", err);
     return { totalFound: 0 };
   }
@@ -212,12 +282,14 @@ async function enrichOrganization(
   userId: string,
   campaignId?: string,
   linkId?: string,
+  preparedRecent?: boolean,
 ) {
   return withAction(
     `Enrich company: ${org.name}`,
     async () => {
       // Check recency
-      const recent = await isRecentlyEnriched("organizations", orgId);
+      const recent =
+        preparedRecent ?? (await isRecentlyEnriched("organizations", orgId));
       if (recent) {
         // Still find contacts even if enrichment is cached
         let contactsFound = 0;
@@ -457,6 +529,14 @@ async function enrichOrganization(
             }
           : null;
 
+      if (
+        isHostedMode() &&
+        !searches.length &&
+        !enrichmentData.website &&
+        !(runGoogleReviews && googleReviewsResult.status === "fulfilled") &&
+        !careers
+      )
+        throw new Error("All company research sources failed");
       const extracted = await extractClaims({
         companyName: org.name as string,
         companyDomain,
