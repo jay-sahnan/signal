@@ -66,8 +66,10 @@ export function BillingSettings({ initial }: { initial: Status }) {
           ))}
         </dl>
         <p className="text-muted-foreground text-sm">
-          New top-ups add {status.packCredits.toLocaleString()} credits per
-          pack. Purchased credits do not expire. Top-ups are manual; there is no
+          {status.packCredits === null
+            ? "Top-ups are temporarily unavailable."
+            : `New top-ups add ${status.packCredits.toLocaleString()} credits per pack.`}{" "}
+          Purchased credits do not expire. Top-ups are manual; there is no
           automatic renewal.
         </p>
         {status.pendingPurchase && (
@@ -83,7 +85,7 @@ export function BillingSettings({ initial }: { initial: Status }) {
         )}
         {status.canManage ? (
           <div className="flex flex-wrap gap-2">
-            {!status.riskHold && (
+            {!status.riskHold && status.packCredits !== null && (
               <Button
                 className="min-h-11"
                 disabled={busy !== null}

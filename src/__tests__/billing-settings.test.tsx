@@ -87,3 +87,10 @@ it("explains manual top-ups and pending confirmation", () => {
   expect(screen.getByText(/75 credits is pending/i)).toBeTruthy();
   expect(screen.getByRole("button", { name: /resume checkout/i })).toBeTruthy();
 });
+
+it("shows balances but no purchase action when top-ups are unavailable", () => {
+  render(<BillingSettings initial={{ ...initial, packCredits: null }} />);
+  expect(screen.getByText("Available credits")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Buy credits" })).toBeNull();
+  expect(screen.getByText(/Top-ups are temporarily unavailable/)).toBeTruthy();
+});
