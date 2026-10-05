@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  rpc: vi.fn(),
   existing: vi.fn(),
   provider: vi.fn(),
   reviews: vi.fn(),
@@ -69,7 +70,9 @@ vi.mock("@/lib/supabase/server", () => {
   };
 });
 import { POST } from "@/app/api/enrich-company/route";
-import { CreditExecutionError } from "@/lib/billing/credit-execution";
+vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: () => ({ rpc: h.rpc }) }));
+vi.mock("@/lib/services/claim-extractor", () => ({ extractClaims: async () => [] }));
+import { CreditExecutionError, executeWithCredits } from "@/lib/billing/credit-execution";
 const key = "22222222-2222-4222-8222-222222222222";
 const call = (body: unknown = { companyId: "link" }) =>
   POST(
@@ -203,4 +206,46 @@ it("keeps new domainless cached reads free", async () => {
   h.recent.mockResolvedValue(true);
   expect(await (await call()).json()).toMatchObject({ skipped: true });
   expect(h.paid).not.toHaveBeenCalled();
+});
+
+function useRealCreditExecution() {
+  h.action.mockImplementation(async (_label, work) => work());
+  h.rpc.mockImplementation(async (name) => ({ data:
+    name === "reserve_credit_quote" ? { id: "operation", state: "reserved", credits: 5 } : true,
+  }));
+  h.paid.mockImplementation((input, work) => executeWithCredits({
+    ...input, identity: { ...input.identity, workspaceId: "workspace" }, credits: 5, rateVersion: "v1",
+  }, work));
+}
+it("does not settle an empty business match when all research sources failed", async () => {
+  useRealCreditExecution();
+  h.provider.mockRejectedValue(new Error("Provider offline"));
+  h.reviews.mockResolvedValue({ found: true, reviews: [], userRatingCount: 0 });
+  h.discovery.mockResolvedValue({ totalFound: 0 });
+  expect((await call()).status).toBe(500);
+  expect(h.rpc).toHaveBeenLastCalledWith("finish_credit_operation",
+    expect.objectContaining({ p_state: "uncertain", p_charged: null }));
+  expect(h.rpc.mock.calls.some(([name]) => name === "finish_serialized_credit_result")).toBe(false);
+});
+it("executes research for a reserved domainless operation instead of charging a cache-only callback", async () => {
+  useRealCreditExecution();
+  h.domain = null;
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  h.provider.mockRejectedValue(new Error("Provider offline"));
+  expect((await call()).status).toBe(500);
+  expect(h.provider).toHaveBeenCalled();
+  expect(h.rpc).toHaveBeenLastCalledWith("finish_credit_operation",
+    expect.objectContaining({ p_state: "uncertain" }));
+});
+it("accepts actual review evidence as a partial research result", async () => {
+  useRealCreditExecution();
+  h.provider.mockRejectedValue(new Error("Provider offline"));
+  h.reviews.mockResolvedValue({ found: true, rating: 4.5, reviews: [], userRatingCount: 3 });
+  h.discovery.mockResolvedValue({ totalFound: 0 });
+  const response = await call();
+  expect(response.status).toBe(200);
+  expect((await response.json()).enrichmentData.googleReviews.rating).toBe(4.5);
+  expect(h.rpc).toHaveBeenLastCalledWith("finish_serialized_credit_result",
+    expect.objectContaining({ p_charged: 5 }));
 });
