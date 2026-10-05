@@ -170,3 +170,26 @@ it("checks the original verification action even after an address becomes truste
     expect.objectContaining({ kind: "email.verify" }), expect.any(Function),
   );
 });
+
+it("replays settled email work without depending on the current company read", async () => {
+  h.existing.mockResolvedValue(true);
+  const normal = h.db.from.getMockImplementation()!;
+  h.db.from.mockImplementation((table: string) => {
+    if (table === "organizations") throw new Error("company read unavailable");
+    return normal(table);
+  });
+  expect(await lookup()).toMatchObject({ email: "replayed@example.com" });
+  expect(h.db.from).not.toHaveBeenCalledWith("organizations");
+  expect(h.mx).not.toHaveBeenCalled();
+});
+it("still researches an unstarted reservation when contact data has become cached", async () => {
+  h.existing.mockResolvedValue(true);
+  h.person.work_email = "stored@example.com";
+  h.paid.mockImplementation(async (_input, work) => runWithIdentity(
+    { userId: "owner", source: "mcp", operationId: "reserved" }, work,
+  ));
+  h.mx.mockRejectedValue(new Error("provider boundary reached"));
+  await expect(lookup()).rejects.toThrow("provider boundary reached");
+  expect(h.mx).toHaveBeenCalledWith("example.com");
+  expect(h.paid).toHaveBeenCalledTimes(1);
+});
