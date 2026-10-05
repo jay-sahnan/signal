@@ -57,3 +57,11 @@ it("clears a terminal zero-charge refusal", async () => {
   expect(await call()).toMatchObject({ error: "No domain" });
   expect(sessionStorage.length).toBe(0);
 });
+
+it("does not send paid work when a durable retry key cannot be saved", async () => {
+  const blocked = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("Blocked", "SecurityError"); });
+  try {
+    await expect(call()).rejects.toThrow("Enable site storage");
+    expect(fetchMock).not.toHaveBeenCalled();
+  } finally { blocked.mockRestore(); }
+});

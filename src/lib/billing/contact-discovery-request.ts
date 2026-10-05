@@ -10,10 +10,13 @@ export async function requestContactDiscovery(
 ) {
   if (!userId) throw new Error("Sign in before discovering contacts.");
   const storageKey = `signal:contact-discovery:${userId}:${mode}:${campaignId ?? ""}:${companyId}`;
-  let key = sessionStorage.getItem(storageKey);
-  if (!key) {
-    key = crypto.randomUUID();
-    sessionStorage.setItem(storageKey, key);
+  let key: string;
+  try {
+    const saved = sessionStorage.getItem(storageKey);
+    key = saved ?? crypto.randomUUID();
+    if (!saved) sessionStorage.setItem(storageKey, key);
+  } catch {
+    throw new Error("Enable site storage before starting contact discovery. No request was sent.");
   }
   const res = await apiFetch(mode === "contacts" ? "/api/find-contacts" : `/api/companies/${companyId}/find-more-people`, {
     method: "POST",
