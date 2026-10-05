@@ -145,6 +145,7 @@ async function findEmailForPersonImpl(
     verify?: boolean;
   } = {},
   snapshot?: EmailLookupSnapshot,
+  reservedReplay = false,
 ): Promise<{
   email: string | null;
   source?: string;
@@ -204,7 +205,7 @@ async function findEmailForPersonImpl(
     person.work_email_source === "user_entered" ||
     person.work_email_source === "send_confirmed";
 
-  if (!snapshot && !existing && person.work_email && (alreadyTrusted || !opts.revalidate)) {
+  if (!snapshot && !existing && !reservedReplay && person.work_email && (alreadyTrusted || !opts.revalidate)) {
     return {
       email: person.work_email,
       source: person.work_email_source ?? "existing",
@@ -220,8 +221,16 @@ async function findEmailForPersonImpl(
   // Same revalidate carve-out as above: without it, a person who happens to
   // have a personal address short-circuits here and their unverified work email
   // is never checked, while the tool reports success.
-  if (!snapshot && !existing && person.personal_email && !opts.revalidate) {
+  if (!snapshot && !existing && !reservedReplay && person.personal_email && !opts.revalidate) {
     return { email: person.personal_email, source: "existing", personId };
+  }
+
+  if (paidInput && existing) {
+    // A saved result must not depend on current company metadata. An unstarted
+    // reservation still runs the waterfall inside the ledger, bypassing cache.
+    return executePaidAction(paidInput, () =>
+      findEmailForPersonImpl(personId, opts, undefined, true),
+    );
   }
 
   let domain = snapshot?.domain ?? null;
