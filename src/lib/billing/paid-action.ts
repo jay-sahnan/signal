@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { getCurrentIdentity, type Identity } from "@/lib/auth/identity";
 import { isHostedMode, resolveWorkspace } from "@/lib/auth/workspace";
-import { CreditExecutionError, executeWithCredits, NoBillableWork } from "./credit-execution";
+import { CreditExecutionError, executeWithCredits, NoBillableWork, requestHash } from "./credit-execution";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { getWebBillingTurn } from "./web-billing-turn";
 import { quoteCredits } from "./credit-pricing";
 
 type PaidAction = {
@@ -16,7 +17,7 @@ type PaidAction = {
   units?: number;
 };
 
-type ActionIdentity = Pick<PaidAction, "identity" | "key" | "kind">;
+type ActionIdentity = PaidAction;
 
 async function resolveAction(input: ActionIdentity) {
   if (
@@ -36,6 +37,12 @@ async function resolveAction(input: ActionIdentity) {
   const workspaceId = await resolveWorkspace(input.identity.userId);
   if (input.identity.workspaceId && input.identity.workspaceId !== workspaceId)
     throw new CreditExecutionError("Workspace mismatch", 403);
+  // Regeneration changes model call IDs. Bind web chat work to the durable user
+  // turn and validated action payload; repeated identical work replays once.
+  const turn = input.identity.source === "web" ? getWebBillingTurn() : undefined;
+  const operationKey = turn
+    ? requestHash({ turn, request: input.request, units: input.units ?? 1 })
+    : input.key.toLowerCase();
   // Workspace members and separate action types cannot collide on a supplied UUID.
   const key = createHash("sha256")
     .update(
@@ -43,7 +50,7 @@ async function resolveAction(input: ActionIdentity) {
         input.identity.source,
         input.identity.userId,
         input.kind,
-        input.key.toLowerCase(),
+        operationKey,
       ]),
     )
     .digest("hex");

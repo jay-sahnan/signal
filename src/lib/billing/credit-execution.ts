@@ -17,7 +17,7 @@ export class CreditExecutionError extends Error {
     super(message);
   }
 }
-function requestHash(value: unknown) {
+export function requestHash(value: unknown) {
   const serialized = JSON.stringify(value, (_key, item) => {
     if (
       item === undefined ||
