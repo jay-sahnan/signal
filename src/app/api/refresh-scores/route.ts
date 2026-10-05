@@ -1,3 +1,6 @@
+import { isHostedMode } from "@/lib/auth/workspace";
+import { executePaidAction } from "@/lib/billing/paid-action";
+import { CreditExecutionError, NoBillableWork } from "@/lib/billing/credit-execution";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -38,6 +41,18 @@ export async function POST(request: Request) {
     return Response.json({ error: "campaignId is required" }, { status: 400 });
   }
 
+  const hosted = isHostedMode();
+  let selectedIds: string[] = [];
+  const key = request.headers.get("Idempotency-Key");
+  if (hosted) {
+    const selection = z.array(z.string().uuid()).min(1).max(50).safeParse(body.campaignContactIds);
+    if (!selection.success || !z.string().uuid().safeParse(key).success)
+      return Response.json({ error: "Select 1–50 campaign contacts and provide a stable operation UUID" }, { status: 400 });
+    selectedIds = selection.data.map(id => id.toLowerCase()).sort();
+    if (new Set(selectedIds).size !== selectedIds.length)
+      return Response.json({ error: "Duplicate campaign contacts" }, { status: 400 });
+  }
+
   // Fetch campaign ICP (also serves as ownership check -- defense in depth
   // layered on top of RLS)
   const { data: campaign, error: campaignError } = await supabase
@@ -53,37 +68,44 @@ export async function POST(request: Request) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  return withAction(
+  // Fetch campaign_people linked to enriched people
+  let selectionQuery = supabase
+    .from("campaign_people")
+    .select(
+      "id, person_id, person:people(id, name, title, linkedin_url, twitter_url, enrichment_data, enrichment_status, organization:organizations!organization_id(name, domain, industry, enrichment_data))",
+    )
+    .eq("campaign_id", campaignId);
+  if (hosted) selectionQuery = selectionQuery.in("id", selectedIds);
+  const { data: links, error: linksError } = await selectionQuery;
+
+  if (linksError) {
+    return Response.json(
+      { error: `Failed to fetch contacts: ${linksError.message}` },
+      { status: 500 },
+    );
+  }
+
+  if (hosted && (links?.length !== selectedIds.length || links.some(link => !selectedIds.includes(link.id))))
+    return Response.json({ error: "Selected campaign contacts not found" }, { status: 404 });
+
+  // Filter to only enriched people
+  const enrichedLinks = (links || []).filter((l) => {
+    const person = l.person as unknown as {
+      enrichment_status: string;
+    } | null;
+    return person?.enrichment_status === "enriched";
+  });
+
+  const work = () => withAction(
     `Score contacts: ${campaign.name}`,
     async () => {
-      // Fetch campaign_people linked to enriched people
-      const { data: links, error: linksError } = await supabase
-        .from("campaign_people")
-        .select(
-          "id, person_id, person:people(id, name, title, linkedin_url, twitter_url, enrichment_data, enrichment_status, organization:organizations!organization_id(name, domain, industry, enrichment_data))",
-        )
-        .eq("campaign_id", campaignId);
-
-      if (linksError) {
-        return Response.json(
-          { error: `Failed to fetch contacts: ${linksError.message}` },
-          { status: 500 },
-        );
-      }
-
-      // Filter to only enriched people
-      const enrichedLinks = (links || []).filter((l) => {
-        const person = l.person as unknown as {
-          enrichment_status: string;
-        } | null;
-        return person?.enrichment_status === "enriched";
-      });
-
+      if (hosted && enrichedLinks.length !== selectedIds.length)
+        return new NoBillableWork({ scored: 0, message: "All selected contacts must be enriched. No credits were charged. Start a new request after enriching them." });
       if (enrichedLinks.length === 0) {
-        return Response.json({
+        return {
           scored: 0,
           message: "No enriched contacts to score",
-        });
+        };
       }
 
       const profile = await getProfileForPrompt(campaignId);
@@ -193,6 +215,11 @@ Contacts to score (enrichment data scraped from LinkedIn, Twitter, news):
 ${wrapUntrusted(JSON.stringify(contactSummaries, null, 2))}`,
       });
 
+      const allowed = new Set(enrichedLinks.map(link => link.id));
+      const returned = result.object.scores.map(score => score.id);
+      if (hosted && (returned.length !== allowed.size || new Set(returned).size !== returned.length || returned.some(id => !allowed.has(id))))
+        throw new Error("Scoring returned an invalid contact selection");
+
       trackUsage({
         service: "claude",
         operation: "score-contacts",
@@ -220,6 +247,7 @@ ${wrapUntrusted(JSON.stringify(contactSummaries, null, 2))}`,
             .from("campaign_people")
             .update({ priority_score: s.score, score_reason: s.reason })
             .eq("id", s.id)
+            .eq("campaign_id", campaignId)
             .select("id");
           if (error || !updated || updated.length === 0) {
             console.error(
@@ -235,12 +263,22 @@ ${wrapUntrusted(JSON.stringify(contactSummaries, null, 2))}`,
       const stored = outcomes.filter((o) => o.stored).length;
       const failedIds = outcomes.filter((o) => !o.stored).map((o) => o.id);
 
-      return Response.json({
+      if (hosted && failedIds.length > 0)
+        throw new Error("Score persistence failed; credits remain reserved for reconciliation");
+      return {
         scored: stored,
         ...(failedIds.length > 0 ? { failedIds } : {}),
         scores: result.object.scores,
-      });
+      };
     },
     user.id,
   ); // end withAction
+  try {
+    const result = hosted ? await executePaidAction({ identity: { userId: user.id, source: "web" }, key,
+      kind: "contact.score", units: selectedIds.length, request: { campaignId, campaignContactIds: selectedIds } }, work) : await work();
+    return Response.json(result);
+  } catch (error) {
+    return Response.json({ error: error instanceof CreditExecutionError ? error.message : "Score refresh failed. Retry the same request." },
+      { status: error instanceof CreditExecutionError ? error.status : 500 });
+  }
 }
