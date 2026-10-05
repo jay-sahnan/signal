@@ -1,10 +1,19 @@
+import { paidContactDiscovery } from "@/lib/billing/contact-discovery";
+import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { withAction } from "@/lib/services/cost-tracker";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 import { findContactsForOrganization } from "@/lib/services/contact-discovery";
 
 export const maxDuration = 120;
 
-export async function POST(
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { return await discover(request, context); }
+  catch (error) {
+    return Response.json({ error: error instanceof CreditExecutionError ? error.message : "Contact discovery failed. Retry the same request." },
+      { status: error instanceof CreditExecutionError ? error.status : 500 });
+  }
+}
+async function discover(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -83,12 +92,15 @@ export async function POST(
   return withAction(
     `Find more people: ${org.name}`,
     async () => {
-      const result = await findContactsForOrganization(supabase, {
+      const result = await paidContactDiscovery({
+        identity: { userId: user.id, source: "web" }, key: request.headers.get("Idempotency-Key"),
+        request: { organizationId: companyId, campaignId, titles, numResults: 10, linkTeamPage: "matching" },
+      }, () => findContactsForOrganization(supabase, {
         organizationId: companyId,
         campaignId,
         titles,
         numResults: 10,
-      });
+      }));
 
       return Response.json({
         found: result.totalFound + result.rejectedAsWrongCompany,
