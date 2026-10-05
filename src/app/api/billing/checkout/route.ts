@@ -2,12 +2,12 @@ import {
   BillingRequestError,
   requireBillingOwner,
 } from "@/lib/billing/account";
-import { beginCheckout } from "@/lib/billing/checkout";
+import { beginPrepaidCheckout } from "@/lib/billing/prepaid-checkout";
 
 export async function POST(request: Request) {
   try {
     const account = await requireBillingOwner(request);
-    return Response.json({ url: await beginCheckout(account) });
+    return Response.json({ url: await beginPrepaidCheckout(account) });
   } catch (error) {
     if (error instanceof BillingRequestError)
       return Response.json({ error: error.message }, { status: error.status });
