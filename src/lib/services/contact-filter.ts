@@ -193,17 +193,15 @@ export async function findPeopleOnDomain(
 
   // Step 2: Fetch matching URLs (cap at 4 to avoid spraying requests)
   const toFetch = urlsToTry.slice(0, 4);
-  let fetchedSuccessfully = false;
   const results = await Promise.allSettled(
     toFetch.map(async (url) => {
       const result = await extractor.extract(url, {
         includeLinks: false,
         timeout: 8000,
       });
-      if (result.success && !result.url.includes("/404")) fetchedSuccessfully = true;
       if (
         result.success &&
-        result.data.content.length > 200 &&
+        (options.strict ? result.data.content.trim().length > 0 : result.data.content.length > 200) &&
         !result.url.includes("/404")
       ) {
         return { url: result.url, content: result.data.content };
@@ -219,7 +217,7 @@ export async function findPeopleOnDomain(
   }
 
   if (scrapedContent.length === 0) {
-    if (options.strict && !fetchedSuccessfully) throw new Error("Domain pages unavailable");
+    if (options.strict) throw new Error("Domain pages unavailable");
     return [];
   }
 

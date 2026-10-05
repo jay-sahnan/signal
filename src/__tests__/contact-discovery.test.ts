@@ -811,3 +811,14 @@ it("records failure when the domain provider is the only requested source", asyn
   expect(result.sourcesSucceeded).toBe(0);
   expect(result.noBillableWork).not.toBe(true);
 });
+
+it("propagates hosted write failure after creating a domain person", async () => {
+  vi.stubEnv("SIGNAL_DEPLOYMENT_MODE", "hosted");
+  const { recordAffiliation } = await import("@/lib/services/affiliation");
+  domainPeople.mockResolvedValueOnce([{ name: "Alice", title: "Engineer" }]);
+  vi.mocked(recordAffiliation).mockRejectedValueOnce(new Error("Write interrupted"));
+  try {
+    await expect(findContactsForOrganization(client(), { organizationId: "org-1", titles: [] })).rejects.toThrow("Write interrupted");
+    expect(created).toHaveLength(1);
+  } finally { vi.unstubAllEnvs(); }
+});

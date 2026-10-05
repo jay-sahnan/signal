@@ -439,3 +439,16 @@ it("surfaces failed people extraction in strict accounting mode", async () => {
   generateObjectMock.mockRejectedValue(new Error("Extraction unavailable"));
   await expect(findPeopleOnDomain("acme.com", "Acme", { strict: true })).rejects.toThrow("Extraction unavailable");
 });
+
+it("inspects short nonempty pages before treating them as successful sources", async () => {
+  fetchMock.mockResolvedValue({ ok: false });
+  extractMock.mockResolvedValue({ success: true, url: "https://acme.com/team", data: { content: "Alice Smith, engineer at Acme." } });
+  generateObjectMock.mockResolvedValue({ object: { people: [] }, usage: { inputTokens: 1, outputTokens: 1 } });
+  await findPeopleOnDomain("acme.com", "Acme", { strict: true });
+  expect(generateObjectMock).toHaveBeenCalled();
+});
+it("does not treat empty successful fetches as researched pages", async () => {
+  fetchMock.mockResolvedValue({ ok: false });
+  extractMock.mockResolvedValue({ success: true, url: "https://acme.com/team", data: { content: "" } });
+  await expect(findPeopleOnDomain("acme.com", "Acme", { strict: true })).rejects.toThrow("Domain pages unavailable");
+});

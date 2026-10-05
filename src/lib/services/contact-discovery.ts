@@ -323,6 +323,7 @@ export async function findContactsForOrganization(
   if (org.domain) {
     try {
       const domainPeople = await findPeopleOnDomain(org.domain, org.name, { strict: isHostedMode() });
+      domainSourceSucceeded = true;
       for (const dp of domainPeople) {
         const linkedinUrl = dp.linkedinUrl
           ? normalizeLinkedInUrl(dp.linkedinUrl)
@@ -402,8 +403,10 @@ export async function findContactsForOrganization(
             : unchangedEvidence(write.reason, evidence),
         });
       }
-      domainSourceSucceeded = true;
     } catch (err) {
+      // Once discovery returns, failures belong to persistence. Hosted work
+      // may be partially applied and must retain its reservation for recovery.
+      if (isHostedMode() && domainSourceSucceeded) throw err;
       console.error("[contact-discovery] Domain scrape failed:", err);
     }
   }
