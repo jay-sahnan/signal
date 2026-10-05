@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Zap } from "lucide-react";
 import { toast } from "sonner";
 
@@ -13,6 +13,7 @@ import {
 import { SafeLink } from "@/components/safe-link";
 import { Switch } from "@/components/ui/switch";
 import { signalIconMap } from "@/lib/signal-icons";
+import { setCampaignSignal, preferPrivateSignalCopies } from "@/lib/signals/community-copies";
 import { createClient } from "@/lib/supabase/client";
 import type { Signal } from "@/lib/types/signal";
 
@@ -55,7 +56,7 @@ async function fetchSignalsData(campaignId: string): Promise<SignalsData> {
   }
 
   return {
-    signals: (signalsRes.data as Signal[]) ?? [],
+    signals: preferPrivateSignalCopies((signalsRes.data as Signal[]) ?? []),
     enabled,
   };
 }
@@ -65,13 +66,15 @@ export function CampaignSignalsPopover({
 }: CampaignSignalsPopoverProps) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<SignalsData | null>(null);
+  const currentCampaign = useRef(campaignId);
 
   const load = useCallback(async () => {
     const result = await fetchSignalsData(campaignId);
-    setData(result);
+    if (currentCampaign.current === campaignId) setData(result);
   }, [campaignId]);
 
   useEffect(() => {
+    currentCampaign.current = campaignId;
     let cancelled = false;
     fetchSignalsData(campaignId).then((result) => {
       if (!cancelled) setData(result);
@@ -92,14 +95,8 @@ export function CampaignSignalsPopover({
         : prev,
     );
     const supabase = createClient();
-    const { error } = await supabase.from("campaign_signals").upsert(
-      {
-        campaign_id: campaignId,
-        signal_id: signalId,
-        enabled,
-      },
-      { onConflict: "campaign_id,signal_id" },
-    );
+    const { data: link, error } = await setCampaignSignal(supabase, campaignId, signalId, enabled);
+    if (currentCampaign.current !== campaignId) return;
     if (error) {
       toast.error("Failed to toggle signal");
       setData((prev) =>
@@ -110,6 +107,9 @@ export function CampaignSignalsPopover({
             }
           : prev,
       );
+    } else if (link?.signal_id !== signalId) {
+      await load();
+      toast.success("Community signal copied to your workspace");
     }
   };
 
