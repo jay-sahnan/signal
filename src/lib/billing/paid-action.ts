@@ -80,8 +80,11 @@ export async function hasPaidAction(input: ActionIdentity): Promise<boolean> {
 export async function executePaidAction<T>(
   input: PaidAction,
   work: () => Promise<T | NoBillableWork<T>>,
+  /** Read-only preflight only: never providers, mutations, or billable work. */
+  prepare?: () => Promise<void>,
 ): Promise<T> {
   if (!isHostedMode()) {
+    await prepare?.();
     const result = await work();
     return result instanceof NoBillableWork ? result.value : result;
   }
@@ -105,5 +108,6 @@ export async function executePaidAction<T>(
       ...quote,
     },
     work,
+    prepare,
   );
 }

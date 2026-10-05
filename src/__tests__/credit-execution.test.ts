@@ -205,3 +205,21 @@ it("unwraps unbilled results in self-hosted mode without touching the ledger", a
   expect(await executeWithCredits(input, async () => new NoBillableWork("skipped"))).toBe("skipped");
   expect(h.rpc).not.toHaveBeenCalled();
 });
+
+it("does not claim or mark uncertain when read-only preparation fails", async () => {
+  const work = vi.fn().mockResolvedValue(null);
+  const prepare = vi.fn().mockRejectedValue(new Error("Metadata unavailable"));
+  await expect(executeWithCredits(input, work, prepare)).rejects.toThrow("Metadata unavailable");
+  expect(h.rpc.mock.calls.map(([name]) => name)).toEqual(["reserve_credit_quote"]);
+  expect(work).not.toHaveBeenCalled();
+  prepare.mockResolvedValue(undefined);
+  await executeWithCredits(input, work, prepare);
+  expect(work).toHaveBeenCalledTimes(1);
+});
+it("replays completed work without running preparation", async () => {
+  h.rpc.mockResolvedValueOnce({ data: { id: "operation", state: "succeeded" } })
+    .mockResolvedValueOnce({ data: JSON.stringify({ found: 2 }) });
+  const prepare = vi.fn().mockRejectedValue(new Error("Metadata unavailable"));
+  expect(await executeWithCredits(input, vi.fn(), prepare)).toEqual({ found: 2 });
+  expect(prepare).not.toHaveBeenCalled();
+});

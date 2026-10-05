@@ -145,7 +145,6 @@ async function findEmailForPersonImpl(
     verify?: boolean;
   } = {},
   snapshot?: EmailLookupSnapshot,
-  reservedReplay = false,
 ): Promise<{
   email: string | null;
   source?: string;
@@ -205,7 +204,7 @@ async function findEmailForPersonImpl(
     person.work_email_source === "user_entered" ||
     person.work_email_source === "send_confirmed";
 
-  if (!snapshot && !existing && !reservedReplay && person.work_email && (alreadyTrusted || !opts.revalidate)) {
+  if (!snapshot && !existing && person.work_email && (alreadyTrusted || !opts.revalidate)) {
     return {
       email: person.work_email,
       source: person.work_email_source ?? "existing",
@@ -221,15 +220,25 @@ async function findEmailForPersonImpl(
   // Same revalidate carve-out as above: without it, a person who happens to
   // have a personal address short-circuits here and their unverified work email
   // is never checked, while the tool reports success.
-  if (!snapshot && !existing && !reservedReplay && person.personal_email && !opts.revalidate) {
+  if (!snapshot && !existing && person.personal_email && !opts.revalidate) {
     return { email: person.personal_email, source: "existing", personId };
   }
 
   if (paidInput && existing) {
-    // A saved result must not depend on current company metadata. An unstarted
-    // reservation still runs the waterfall inside the ledger, bypassing cache.
-    return executePaidAction(paidInput, () =>
-      findEmailForPersonImpl(personId, opts, undefined, true),
+    let prepared: EmailLookupSnapshot;
+    return executePaidAction(
+      paidInput,
+      () => findEmailForPersonImpl(personId, opts, prepared),
+      async () => {
+        // Replay skips this read; unstarted work prepares before claiming so a
+        // metadata outage cannot strand a reservation as uncertain.
+        const { data: org, error } = person.organization_id
+          ? await supabase.from("organizations").select("domain, is_catch_all")
+              .eq("id", person.organization_id).single()
+          : { data: null, error: null };
+        if (error) throw new CreditExecutionError("Could not load contact company", 503);
+        prepared = { person, domain: org?.domain ?? null, orgIsCatchAll: org?.is_catch_all ?? null };
+      },
     );
   }
 
