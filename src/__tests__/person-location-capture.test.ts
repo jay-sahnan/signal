@@ -28,7 +28,7 @@ vi.mock("@/lib/services/exa-service", () => ({
             title: "Profile",
             url: "https://example.com/ann",
             publishedDate: "2026-07-01",
-            text: "Ann A is an engineer based in Berlin, Germany.",
+            text: "Ann A is an engineer at Acme based in Berlin, Germany.",
           },
         ],
         resultCount: 1,
@@ -76,7 +76,7 @@ const personRow = (over: FakeRow = {}): FakeRow => ({
   twitter_url: null,
   work_email: null,
   personal_email: null,
-  organization_id: null,
+  organization_id: ORG_ID,
   enrichment_data: null,
   affiliation_confidence: 0.9,
   ...over,
@@ -89,7 +89,13 @@ const inserts: Array<Record<string, unknown>> = [];
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () =>
     createSupabaseFake({
-      tables: { people: () => people, organizations: () => [] },
+      tables: {
+        people: () => people,
+        // The person under test needs an employer: web search results are
+        // identity-gated on name + company, and company-less people skip
+        // web search entirely.
+        organizations: () => [{ id: ORG_ID, name: "Acme" }],
+      },
       relations: {
         people: { organization: { localKey: "organization_id" } },
       },

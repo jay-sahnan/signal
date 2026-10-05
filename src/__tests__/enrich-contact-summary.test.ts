@@ -13,21 +13,21 @@ vi.mock("@/lib/tools/email-tools", () => ({ findEmailForPerson }));
  * Every Exa search in this path returns the same dated archive snapshot, so a
  * test can check the date survives the trip to the summarizer.
  */
+const exaSearch = vi.fn(async () => ({
+  results: [
+    {
+      title: "Archived profile",
+      url: "https://web.archive.org/victor",
+      publishedDate: "2026-03-29",
+      text: "Ann A, Customer Engineer at Browserbase, May 2025 - Present",
+    },
+  ],
+  resultCount: 1,
+}));
 vi.mock("@/lib/services/exa-service", () => ({
   ExaService: class {
-    async search() {
-      return {
-        results: [
-          {
-            title: "Archived profile",
-            url: "https://web.archive.org/victor",
-            publishedDate: "2026-03-29",
-            text: "Customer Engineer at Browserbase, May 2025 - Present",
-          },
-        ],
-        resultCount: 1,
-      };
-    }
+    search = (...args: unknown[]) =>
+      (exaSearch as unknown as (...a: unknown[]) => unknown)(...args);
   },
 }));
 
@@ -78,7 +78,7 @@ const seed = (over: FakeRow = {}) => {
       title: "Engineer",
       linkedin_url: null,
       twitter_url: null,
-      organization_id: null,
+      organization_id: "org-1",
       enrichment_data: null,
       work_email: null,
       personal_email: null,
@@ -106,7 +106,10 @@ const updates: Array<Record<string, unknown>> = [];
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () =>
     createSupabaseFake({
-      tables: { people: () => people, organizations: () => [] },
+      tables: {
+        people: () => people,
+        organizations: () => [{ id: "org-1", name: "Browserbase" }],
+      },
       relations: {
         people: { organization: { localKey: "organization_id" } },
       },
@@ -319,5 +322,75 @@ describe("stuck in_progress recovery", () => {
     )) as { skipped?: boolean };
 
     expect(result.skipped).toBe(true);
+  });
+});
+
+describe("namesake anchoring", () => {
+  beforeEach(async () => {
+    updates.length = 0;
+    summarizePerson.mockClear();
+    exaSearch.mockClear();
+    // The in_progress recovery tests queue a mockResolvedValueOnce(true)
+    // that short-circuiting never consumes; drain it so recency stays false.
+    const { isRecentlyEnriched } =
+      await import("@/lib/services/knowledge-base");
+    vi.mocked(isRecentlyEnriched).mockReset();
+    vi.mocked(isRecentlyEnriched).mockResolvedValue(false);
+    // An address on file keeps email discovery out of the way.
+    seed({ work_email: "ann@browserbase.com" });
+  });
+
+  it("drops results about a namesake at a different company", async () => {
+    // The long-standing namesake bug: Exa is semantic, so a search for
+    // "Ann A" "Browserbase" happily returns an Ann A at Oracle, and her
+    // career used to be stored as this contact's enrichment and woven into
+    // outreach.
+    exaSearch.mockResolvedValue({
+      results: [
+        {
+          title: "Ann A promoted to VP at Oracle",
+          url: "https://news.example.com/oracle-ann",
+          publishedDate: "2026-07-01",
+          text: "Ann A has spent 15 years at Oracle leading databases.",
+        },
+        {
+          title: "Ann A of Browserbase on browser infra",
+          url: "https://news.example.com/bb-ann",
+          publishedDate: "2026-07-02",
+          text: "An interview with Ann A, engineer at Browserbase.",
+        },
+      ],
+      resultCount: 2,
+    });
+
+    await enrichContact.execute!({ contactId: PERSON_ID }, {} as never);
+
+    const input = summarizePerson.mock.calls[0][0] as {
+      news?: Array<{ url: string }> | null;
+    };
+    const urls = (input.news ?? []).map((r) => r.url);
+    expect(urls).toContain("https://news.example.com/bb-ann");
+    expect(urls).not.toContain("https://news.example.com/oracle-ann");
+  });
+
+  it("skips web search entirely for a contact with no company", async () => {
+    // With only a name there is nothing to tie a result to this human, so
+    // searching at all is how strangers' articles got stored. LinkedIn/X
+    // (URL-anchored) still run; the result says why the searches did not.
+    seed({
+      organization_id: null,
+      work_email: "ann@example.com",
+      linkedin_url: null,
+    });
+
+    const result = (await enrichContact.execute!(
+      { contactId: PERSON_ID },
+      {} as never,
+    )) as { errors?: string[] };
+
+    expect(exaSearch).not.toHaveBeenCalled();
+    expect(result.errors?.some((e) => /no company on file/i.test(e))).toBe(
+      true,
+    );
   });
 });
