@@ -84,6 +84,7 @@ export function CompaniesList({
 }: CompaniesListProps) {
   const { openAgentWith } = useCampaign();
   const { userId } = useAuth();
+  const [freshnessNow] = useState(() => Date.now());
   const [expandedCompanyIds, setExpandedCompanyIds] = useState<Set<string>>(
     new Set(),
   );
@@ -531,7 +532,7 @@ export function CompaniesList({
               const isExpanded = expandedCompanyIds.has(company.id);
               const companyContacts =
                 contactsByOrgId.get(company.organization_id) ?? [];
-              const refreshBefore = Date.now() - 7 * 24 * 60 * 60 * 1000;
+              const refreshBefore = freshnessNow - 7 * 24 * 60 * 60 * 1000;
               const pendingEnrichment = companyContacts.filter((contact) => {
                 if (contact.enrichment_status !== "enriched") return true;
                 const stamp = contact.enrichment_data?.enrichedAt ?? contact.last_enriched_at;
