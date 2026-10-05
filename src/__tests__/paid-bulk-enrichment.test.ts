@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  rpc: vi.fn(),
   existing: vi.fn(),
   work: vi.fn(),
   recent: vi.fn(),
@@ -35,7 +36,8 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 import { POST } from "@/app/api/enrich/bulk/route";
-import { CreditExecutionError } from "@/lib/billing/credit-execution";
+vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: () => ({ rpc: h.rpc }) }));
+import { CreditExecutionError, executeWithCredits } from "@/lib/billing/credit-execution";
 const one = "11111111-1111-4111-8111-111111111111";
 const two = "22222222-2222-4222-8222-222222222222";
 const key = "33333333-3333-4333-8333-333333333333";
@@ -145,4 +147,23 @@ it("checks existing batch outcomes even if a contact's sources were removed", as
   h.existing.mockResolvedValue(true);
   expect((await POST(request())).status).toBe(200);
   expect(h.paid).toHaveBeenCalledTimes(1);
+});
+
+it("completes source-less contacts at zero charge without blocking valid batch members", async () => {
+  h.rows = [
+    { person: { id: one, name: "Unknown", organization_id: "org" } },
+    { person: { id: two, name: "Ada", organization_id: "org" } },
+  ];
+  h.rpc.mockImplementation(async (name, args) => ({ data:
+    name === "reserve_credit_quote" ? { id: args.p_key, state: "reserved", credits: 5 } : true,
+  }));
+  h.paid.mockImplementation((input, work) => executeWithCredits({
+    ...input, identity: { ...input.identity, workspaceId: "workspace" }, credits: 5, rateVersion: "v1",
+  }, work));
+  const response = await POST(request([one, two]));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ enriched: 1, failed: 1 });
+  expect(h.work).toHaveBeenCalledTimes(1);
+  const charges = h.rpc.mock.calls.filter(([name]) => name === "finish_serialized_credit_result").map(([, args]) => args.p_charged);
+  expect(charges.sort()).toEqual([0, 5]);
 });

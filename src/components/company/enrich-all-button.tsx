@@ -60,9 +60,9 @@ export function EnrichAllButton({
       // The route caps each batch and skips anyone already enriched, so its
       // own summary is the accurate sentence; the fallback only covers a
       // response that predates it.
-      toast.success(
-        data?.summary ?? `Enriched ${data?.enriched ?? 0} contacts.`,
-      );
+      const summary = data?.summary ?? `Enriched ${data?.enriched ?? 0} contacts.`;
+      if (data?.failed > 0) toast.error(summary);
+      else toast.success(summary);
       setOpen(false);
       onDone();
     } catch (err) {

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { isHostedMode } from "@/lib/auth/workspace";
 import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 import { toolOperationKey } from "@/lib/billing/tool-operation-key";
-import { CreditExecutionError } from "@/lib/billing/credit-execution";
+import { CreditExecutionError, NoBillableWork } from "@/lib/billing/credit-execution";
 import { NextResponse } from "next/server";
 
 import { getSupabaseAndUser } from "@/lib/supabase/server";
@@ -11,6 +11,7 @@ import {
   enrichPerson,
   PERSON_ENRICH_COLUMNS,
   type PersonForEnrichment,
+  type PersonEnrichmentResult,
 } from "@/lib/services/person-enrichment";
 
 export const runtime = "nodejs";
@@ -148,11 +149,9 @@ async function enrichBatch(req: Request) {
   // Skip anyone already enriched recently. isRecentlyEnriched's default window
   // is 7 days, so genuinely stale data still refreshes rather than being
   // frozen forever by one old run.
-  const existingIds = new Set<string>();
   const fresh = await Promise.all(
     candidates.map(async (c) => {
       const existing = hosted && await hasPaidAction(paidInputFor(c.id));
-      if (existing) existingIds.add(c.id);
       return (await isRecentlyEnriched("people", c.id, 7, hosted)) && !existing;
     }),
   );
@@ -176,17 +175,18 @@ async function enrichBatch(req: Request) {
         if (index >= targets.length) return;
         const target = targets[index];
         try {
-          if (
-            hosted && !existingIds.has(target.id) &&
-            (!target.person.name || target.person.name === "Unknown") &&
-            !target.person.linkedin_url &&
-            !target.person.twitter_url
-          )
-            throw new CreditExecutionError(
-              "No enrichment sources available",
-              400,
-            );
           const work = async () => {
+            // Run this after the ledger claim: simultaneous retries must share
+            // one durable outcome before the browser can discard its batch key.
+            if (
+              hosted &&
+              (!target.person.name || target.person.name === "Unknown") &&
+              !target.person.linkedin_url && !target.person.twitter_url
+            ) return new NoBillableWork({
+              status: "failed" as const,
+              enrichmentData: {},
+              errors: ["No enrichment sources available"],
+            });
             const result = await enrichPerson(
               supabase,
               target.id,
@@ -198,11 +198,11 @@ async function enrichBatch(req: Request) {
             return result;
           };
           const result = hosted
-            ? await executePaidAction(
+            ? await executePaidAction<PersonEnrichmentResult>(
                 paidInputFor(target.id),
                 work,
               )
-            : await work();
+            : await enrichPerson(supabase, target.id, target.person, user.id);
           if (result.status === "enriched") enriched.push(target.id);
           else
             failed.push({
@@ -243,6 +243,10 @@ async function enrichBatch(req: Request) {
 
   const remaining = Math.max(0, pending.length - targets.length);
 
+  const failureNote = failed.length ? ` ${failed.length} could not be enriched.` : "";
+  const sourceNote = failed.some((f) => f.reason === "No enrichment sources available")
+    ? " Add a name or social URL to contacts without sources before retrying." : "";
+
   // Report the skip rather than dropping it: without this, clicking Enrich all
   // on a fully-enriched company looks like the button did nothing.
   const skipNote =
@@ -262,7 +266,7 @@ async function enrichBatch(req: Request) {
           ? `Nothing to do: all ${alreadyEnriched} contacts are already enriched.`
           : "No contacts to enrich at this company."
         : remaining > 0
-          ? `Enriched ${enriched.length} of ${targets.length} (${remaining} more to go, click again).${skipNote}`
-          : `Enriched ${enriched.length} of ${targets.length}.${skipNote}`,
+          ? `Enriched ${enriched.length} of ${targets.length} (${remaining} more to go, click again).${skipNote}${failureNote}${sourceNote}`
+          : `Enriched ${enriched.length} of ${targets.length}.${skipNote}${failureNote}${sourceNote}`,
   });
 }
