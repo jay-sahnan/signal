@@ -25,6 +25,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 import {
+  isRecentlyEnriched,
   findOrCreatePerson,
   mergeEnrichmentData,
 } from "@/lib/services/knowledge-base";
@@ -130,4 +131,12 @@ describe("mergeEnrichmentData", () => {
     });
     expect(people[0].enrichment_status).toBe("enriched");
   });
+});
+
+it("fails closed on freshness read errors when billing requires a reliable answer", async () => {
+  readError = { message: "Database unavailable" };
+  await expect(isRecentlyEnriched("people", "person", 7, true)).rejects.toThrow(
+    "Could not check enrichment freshness",
+  );
+  await expect(isRecentlyEnriched("people", "person")).resolves.toBe(false);
 });
