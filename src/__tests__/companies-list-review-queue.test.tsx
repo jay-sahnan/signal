@@ -471,17 +471,24 @@ describe("<CompaniesList> review actions", () => {
     );
   });
 });
+describe("bulk enrichment freshness selection", () => {
+  afterEach(() => { cleanup(); vi.clearAllMocks(); sessionStorage.clear(); });
 it("includes stale successful contacts but excludes fresh ones from the enrichment batch", async () => {
   sessionStorage.clear();
   vi.mocked(apiFetch).mockResolvedValue({ ok: true, json: async () => ({ enriched: 1 }) } as Response);
   renderList([
     contact({ id: "fresh", person_id: "fresh", last_enriched_at: new Date().toISOString() }),
     contact({ id: "stale", person_id: "stale", last_enriched_at: new Date(Date.now() - 8 * 86400000).toISOString() }),
+    contact({ id: "undated", person_id: "undated" }),
+    contact({ id: "invalid", person_id: "invalid", last_enriched_at: "invalid" }),
+    contact({ id: "legacy", person_id: "legacy", enrichment_data: { enrichedAt: new Date().toISOString() } }),
   ]);
   fireEvent.click(screen.getByRole("button", { name: /Enrich all/ }));
-  expect(screen.getByText("Enrich 1 contact?")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Enrich 1" }));
+  expect(screen.getByText("Enrich 3 contacts?")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Enrich 3" }));
   await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/enrich/bulk", expect.any(Object)));
   const init = vi.mocked(apiFetch).mock.calls.find(([url]) => url === "/api/enrich/bulk")![1];
-  expect(JSON.parse(init!.body as string).personIds).toEqual(["stale"]);
+  expect(JSON.parse(init!.body as string).personIds).toEqual(["stale", "undated", "invalid"]);
+});
+
 });
