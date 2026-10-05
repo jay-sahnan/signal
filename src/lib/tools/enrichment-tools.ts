@@ -1,4 +1,4 @@
-import { executePaidAction } from "@/lib/billing/paid-action";
+import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 import { toolOperationKey } from "@/lib/billing/tool-operation-key";
 import { getCurrentIdentity } from "@/lib/auth/identity";
 import { isHostedMode } from "@/lib/auth/workspace";
@@ -1538,14 +1538,21 @@ async function enrichCompanyById(
     }
   }
 
-  // Check recency -- skip if recently enriched
+  const paidInput = hosted ? {
+    identity: getCurrentIdentity() ?? { userId: session!.userId, source: "web" as const },
+    key: operationKey ?? null,
+    kind: "company.enrich",
+    request: { organizationId, campaignId: campaignId ?? null },
+  } : null;
+
+  // Check recency -- skip only new free reads, never existing paid operations.
   const recent = await isRecentlyEnriched(
     "organizations",
     organizationId,
     7,
     hosted,
   );
-  if (recent) {
+  if (recent && (!paidInput || !(await hasPaidAction(paidInput)))) {
     const { data: org, error: cachedError } = await supabase
       .from("organizations")
       .select("name, domain, enrichment_data")
@@ -1588,15 +1595,7 @@ async function enrichCompanyById(
   const research = () => researchCompany(organizationId, org, icp);
   if (!hosted) return research();
   return executePaidAction(
-    {
-      identity: getCurrentIdentity() ?? {
-        userId: session!.userId,
-        source: "web",
-      },
-      key: operationKey ?? null,
-      kind: "company.enrich",
-      request: { organizationId, campaignId: campaignId ?? null },
-    },
+    paidInput!,
     research,
   );
 }

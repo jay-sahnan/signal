@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { createSupabaseFake } from "./helpers/supabase-fake";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  existing: vi.fn(),
   holds: vi.fn(),
   recent: vi.fn(),
   search: vi.fn(),
@@ -10,7 +11,7 @@ const h = vi.hoisted(() => ({
   campaignOwner: "owner",
 }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
-vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
+vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid, hasPaidAction: h.existing }));
 vi.mock("@/lib/tools/ownership", async (original) => ({
   ...(await original<object>()),
   toolSession: async () => ({ userId: "owner", supabase: {} }),
@@ -70,6 +71,7 @@ const call = (campaignId?: string) =>
 beforeEach(() => {
   vi.resetAllMocks();
   h.hosted = true;
+  h.existing.mockResolvedValue(false);
   h.campaignOwner = "owner";
   h.holds.mockResolvedValue(true);
   h.recent.mockResolvedValue(false);
@@ -166,4 +168,19 @@ it("reports missing IDs without dropping valid companies from a batch", async ()
   );
   expect(result).toMatchObject({ total: 2, succeeded: 1, failed: 1 });
   expect(h.paid).toHaveBeenCalledTimes(1);
+});
+
+it("replays the paid company result before accepting a recent profile", async () => {
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  h.paid.mockResolvedValue({ companyId: "org", errors: ["Original partial result"] });
+  expect(await call()).toEqual({ companyId: "org", errors: ["Original partial result"] });
+  expect(h.paid).toHaveBeenCalledTimes(1);
+  expect(h.search).not.toHaveBeenCalled();
+});
+it("does not hide unresolved company operations behind fresh data", async () => {
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  h.paid.mockRejectedValue(new Error("Operation unresolved"));
+  await expect(call()).rejects.toThrow("Operation unresolved");
 });
