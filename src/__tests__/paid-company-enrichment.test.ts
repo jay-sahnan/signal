@@ -1,4 +1,5 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { createSupabaseFake } from "./helpers/supabase-fake";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
@@ -8,6 +9,8 @@ const h = vi.hoisted(() => ({
   search: vi.fn(),
   save: vi.fn(),
   hosted: true,
+  stall: false,
+  lookups: vi.fn(),
   campaignOwner: "owner",
 }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
@@ -42,41 +45,48 @@ vi.mock("@/lib/services/relevance-filter", () => ({
   ) => rows,
 }));
 vi.mock("@/lib/supabase/server", () => ({
-  createClient: async () =>
-    createSupabaseFake({
+  createClient: async () => {
+    h.lookups();
+    if (h.stall) await new Promise(() => {});
+    return createSupabaseFake({
       tables: {
         organizations: () => [
-          { id: "org", name: "Acme", domain: null, enrichment_data: {} },
+          { id: ORG, name: "Acme", domain: null, enrichment_data: {} },
         ],
         campaign_organizations: () => [
-          { id: "link-a", organization_id: "org" },
-          { id: "link-b", organization_id: "org" },
+          { id: LINK_A, organization_id: ORG },
+          { id: LINK_B, organization_id: ORG },
         ],
         campaigns: () => [
           { id: "campaign", user_id: h.campaignOwner, icp: {} },
         ],
       },
-    }),
+    });
+  },
 }));
 import { enrichCompany, enrichCompanies } from "@/lib/tools/enrichment-tools";
 import { runWithIdentity } from "@/lib/auth/identity";
 const key = "22222222-2222-4222-8222-222222222222";
+const ORG = "11111111-1111-4111-8111-111111111111";
+const LINK_A = "33333333-3333-4333-8333-333333333333";
+const LINK_B = "44444444-4444-4444-8444-444444444444";
 const call = (campaignId?: string) =>
   runWithIdentity({ userId: "owner", source: "mcp" }, () =>
     enrichCompany.execute!(
-      { companyId: "org", campaignId, operationId: key } as never,
+      { companyId: ORG, campaignId, operationId: key } as never,
       {} as never,
     ),
   );
 beforeEach(() => {
   vi.resetAllMocks();
   h.hosted = true;
+  h.stall = false;
   h.existing.mockResolvedValue(false);
   h.campaignOwner = "owner";
   h.holds.mockResolvedValue(true);
   h.recent.mockResolvedValue(false);
   h.search.mockResolvedValue({ results: [] });
-  h.paid.mockResolvedValue({ companyId: "org", summary: {} });
+  h.paid.mockResolvedValue({ companyId: ORG, summary: {} });
 });
 it("reserves company research before provider work or saves", async () => {
   await call();
@@ -84,7 +94,7 @@ it("reserves company research before provider work or saves", async () => {
     expect.objectContaining({
       key,
       kind: "company.enrich",
-      request: { organizationId: "org", campaignId: null },
+      request: { organizationId: ORG, campaignId: null },
     }),
     expect.any(Function),
   );
@@ -133,7 +143,7 @@ it("uses stable per-company keys for batch retries", async () => {
   const batch = () =>
     runWithIdentity({ userId: "owner", source: "mcp" }, () =>
       enrichCompanies.execute!(
-        { companyIds: ["org"], operationId: key } as never,
+        { companyIds: [ORG], operationId: key } as never,
         {} as never,
       ),
     );
@@ -148,21 +158,21 @@ it("deduplicates company aliases before deriving the paid batch key", async () =
   const batch = (companyIds: string[]) =>
     runWithIdentity({ userId: "owner", source: "mcp" }, () =>
       enrichCompanies.execute!(
-        { companyIds, operationId: key } as never,
+        (enrichCompanies.inputSchema as z.ZodType).parse({ companyIds, operationId: key }) as never,
         {} as never,
       ),
     );
-  expect(await batch(["link-a", "org", "link-b", "link-a"])).toMatchObject({
+  expect(await batch([LINK_A, ORG, LINK_B, LINK_A])).toMatchObject({
     total: 1, succeeded: 1, failed: 0,
   });
   expect(h.paid).toHaveBeenCalledTimes(1);
-  await batch(["link-b"]);
+  await batch([LINK_B]);
   expect(h.paid.mock.calls[0][0].key).toBe(h.paid.mock.calls[1][0].key);
 });
 it("reports missing IDs without dropping valid companies from a batch", async () => {
   const result = await runWithIdentity({ userId: "owner", source: "mcp" }, () =>
     enrichCompanies.execute!(
-      { companyIds: ["missing", "missing", "link-a"], operationId: key } as never,
+      { companyIds: ["missing", "missing", LINK_A], operationId: key } as never,
       {} as never,
     ),
   );
@@ -173,8 +183,8 @@ it("reports missing IDs without dropping valid companies from a batch", async ()
 it("replays the paid company result before accepting a recent profile", async () => {
   h.recent.mockResolvedValue(true);
   h.existing.mockResolvedValue(true);
-  h.paid.mockResolvedValue({ companyId: "org", errors: ["Original partial result"] });
-  expect(await call()).toEqual({ companyId: "org", errors: ["Original partial result"] });
+  h.paid.mockResolvedValue({ companyId: ORG, errors: ["Original partial result"] });
+  expect(await call()).toEqual({ companyId: ORG, errors: ["Original partial result"] });
   expect(h.paid).toHaveBeenCalledTimes(1);
   expect(h.search).not.toHaveBeenCalled();
 });
@@ -183,4 +193,28 @@ it("does not hide unresolved company operations behind fresh data", async () => 
   h.existing.mockResolvedValue(true);
   h.paid.mockRejectedValue(new Error("Operation unresolved"));
   await expect(call()).rejects.toThrow("Operation unresolved");
+});
+
+afterEach(() => vi.useRealTimers());
+it("returns stalled company lookups without starting paid work", async () => {
+  vi.useFakeTimers();
+  h.stall = true;
+  let settled = false;
+  const result = Promise.resolve(runWithIdentity({ userId: "owner", source: "mcp" }, () =>
+    enrichCompanies.execute!({ companyIds: [ORG], operationId: key } as never, {} as never),
+  )).then((value) => { settled = true; return value; });
+  await vi.advanceTimersByTimeAsync(5001);
+  expect(settled).toBe(true);
+  expect(await result).toMatchObject({ failed: 1, succeeded: 0 });
+  expect(h.paid).not.toHaveBeenCalled();
+});
+it("defers exhausted turns before any company lookup", async () => {
+  const result = await runWithIdentity({ userId: "owner", source: "mcp" }, () =>
+    enrichCompanies.execute!({ companyIds: [ORG], operationId: key } as never, {
+      experimental_context: { deadlineAt: Date.now() + 100 },
+    } as never),
+  );
+  expect(result).toMatchObject({ deferred: [ORG], succeeded: 0, failed: 0 });
+  expect(h.lookups).not.toHaveBeenCalled();
+  expect(h.paid).not.toHaveBeenCalled();
 });

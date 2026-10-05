@@ -1496,6 +1496,7 @@ async function enrichCompanyById(
   companyIdOrLinkId: string,
   campaignId?: string,
   operationKey?: string | null,
+  canonicalId = false,
 ): Promise<{
   companyId: string;
   companyName: string;
@@ -1506,7 +1507,7 @@ async function enrichCompanyById(
   errors?: string[];
 }> {
   const supabase = await createClient();
-  const organizationId = await resolveOrganizationId(companyIdOrLinkId);
+  const organizationId = canonicalId ? companyIdOrLinkId : await resolveOrganizationId(companyIdOrLinkId);
 
   const hosted = isHostedMode();
   const session = hosted ? await toolSession() : null;
@@ -1888,10 +1889,13 @@ export const enrichCompanies = tool({
 
     // Link IDs are aliases. Resolve them before assigning child operation keys
     // or scheduling parallel work, so one company gets one charge per batch.
-    let companyIds = input.companyIds;
-    if (isHostedMode()) {
-      const ids = [...new Set(input.companyIds)];
-      const resolved = await Promise.allSettled(ids.map(resolveOrganizationId));
+    const hosted = isHostedMode();
+    let companyIds = hosted ? [...new Set(input.companyIds)] : input.companyIds;
+    if (hosted && (!deadlineAt || deadlineAt - Date.now() >= PER_COMPANY_TIMEOUT_MS)) {
+      const ids = companyIds;
+      const resolved = await Promise.allSettled(ids.map((id) =>
+        withTimeout(resolveOrganizationId(id), 5_000, `Resolve company ${id}`),
+      ));
       const canonical = new Set<string>();
       resolved.forEach((result, index) => {
         if (result.status === "fulfilled") canonical.add(result.value);
@@ -1929,6 +1933,7 @@ export const enrichCompanies = tool({
               batchKey
                 ? toolOperationKey("web", undefined, `${batchKey}:${id}`)
                 : null,
+              hosted,
             ),
             PER_COMPANY_TIMEOUT_MS,
             `Enrich company ${id}`,
