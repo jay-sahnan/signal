@@ -1,3 +1,4 @@
+import { KnownDiscoveryFailure } from "./discovery-failure";
 import { readBodyCapped, safeFetch } from "@/lib/safe-fetch";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
@@ -193,12 +194,14 @@ export async function findPeopleOnDomain(
 
   // Step 2: Fetch matching URLs (cap at 4 to avoid spraying requests)
   const toFetch = urlsToTry.slice(0, 4);
+  let uncertainFetch = false;
   const results = await Promise.allSettled(
     toFetch.map(async (url) => {
       const result = await extractor.extract(url, {
         includeLinks: false,
         timeout: 8000,
       });
+      if (!result.success) uncertainFetch = true;
       if (
         result.success &&
         (options.strict ? result.data.content.trim().length > 0 : result.data.content.length > 200) &&
@@ -217,7 +220,11 @@ export async function findPeopleOnDomain(
   }
 
   if (scrapedContent.length === 0) {
-    if (options.strict) throw new Error("Domain pages unavailable");
+    if (options.strict) {
+      if (uncertainFetch || results.some(result => result.status === "rejected"))
+        throw new Error("Domain pages unavailable");
+      throw new KnownDiscoveryFailure("Domain pages unavailable");
+    }
     return [];
   }
 

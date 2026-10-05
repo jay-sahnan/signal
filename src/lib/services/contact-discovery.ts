@@ -1,3 +1,4 @@
+import { isKnownDiscoveryFailure } from "./discovery-failure";
 import { isHostedMode } from "@/lib/auth/workspace";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -90,6 +91,7 @@ export interface ContactDiscoveryResult {
   /** Set only by pre-provider validation; never inferred from an empty search. */
   noBillableWork?: true;
   sourcesSucceeded: number;
+  sourcesUncertain?: boolean;
   organizationId: string;
   companyName: string;
   contacts: DiscoveredContact[];
@@ -319,6 +321,7 @@ export async function findContactsForOrganization(
   // ── Phase 1: the company's own website ──────────────────────────────────
   // Strongest routine evidence there is: the company published these people as
   // its own staff.
+  let sourcesUncertain = false;
   let domainSourceSucceeded = false;
   if (org.domain) {
     try {
@@ -407,6 +410,7 @@ export async function findContactsForOrganization(
       // Once discovery returns, failures belong to persistence. Hosted work
       // may be partially applied and must retain its reservation for recovery.
       if (isHostedMode() && domainSourceSucceeded) throw err;
+      if (!isKnownDiscoveryFailure(err)) sourcesUncertain = true;
       console.error("[contact-discovery] Domain scrape failed:", err);
     }
   }
@@ -424,6 +428,7 @@ export async function findContactsForOrganization(
         });
         return { title, query, results: result.results };
       } catch (err) {
+        if (!isKnownDiscoveryFailure(err)) sourcesUncertain = true;
         const msg = err instanceof Error ? err.message : "Unknown error";
         console.error(
           `[contact-discovery] Search failed for "${query}": ${msg}`,
@@ -630,6 +635,7 @@ export async function findContactsForOrganization(
   }
 
   return {
+    sourcesUncertain,
     sourcesSucceeded: Number(domainSourceSucceeded) + searchResults.filter(search => !("error" in search)).length,
     organizationId,
     companyName: org.name,

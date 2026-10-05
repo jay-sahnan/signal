@@ -809,6 +809,7 @@ it("records failure when the domain provider is the only requested source", asyn
   domainPeople.mockRejectedValueOnce(new Error("Domain provider unavailable"));
   const result = await findContactsForOrganization(client(), { organizationId: "org-1", titles: [] });
   expect(result.sourcesSucceeded).toBe(0);
+  expect(result.sourcesUncertain).toBe(true);
   expect(result.noBillableWork).not.toBe(true);
 });
 
@@ -821,4 +822,12 @@ it("propagates hosted write failure after creating a domain person", async () =>
     await expect(findContactsForOrganization(client(), { organizationId: "org-1", titles: [] })).rejects.toThrow("Write interrupted");
     expect(created).toHaveLength(1);
   } finally { vi.unstubAllEnvs(); }
+});
+
+it("distinguishes inspected unusable domain responses from lost responses", async () => {
+  const { KnownDiscoveryFailure } = await import("@/lib/services/discovery-failure");
+  domainPeople.mockRejectedValueOnce(new KnownDiscoveryFailure("Empty provider response"));
+  const result = await findContactsForOrganization(client(), { organizationId: "org-1", titles: [] });
+  expect(result.sourcesSucceeded).toBe(0);
+  expect(result.sourcesUncertain).toBe(false);
 });
