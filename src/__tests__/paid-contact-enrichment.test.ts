@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { createSupabaseFake } from "./helpers/supabase-fake";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  existing: vi.fn(),
   holds: vi.fn(),
   recent: vi.fn(),
   search: vi.fn(),
@@ -10,7 +11,7 @@ const h = vi.hoisted(() => ({
   updates: [] as unknown[],
 }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
-vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
+vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid, hasPaidAction: h.existing }));
 vi.mock("@/lib/tools/ownership", async (original) => ({
   ...(await original<object>()),
   toolSession: async () => ({ userId: "owner", supabase: {} }),
@@ -63,6 +64,7 @@ const call = () =>
 beforeEach(() => {
   vi.clearAllMocks();
   h.hosted = true;
+  h.existing.mockResolvedValue(false);
   h.updates = [];
   h.holds.mockResolvedValue(true);
   h.recent.mockResolvedValue(false);
@@ -156,4 +158,18 @@ it("does not reserve if the freshness check fails", async () => {
   await expect(call()).rejects.toThrow("Freshness unavailable");
   expect(h.paid).not.toHaveBeenCalled();
   expect(h.search).not.toHaveBeenCalled();
+});
+
+it("replays existing contact operations instead of returning cached summaries", async () => {
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  h.paid.mockResolvedValue({ contactId: "person", status: "enriched", errors: ["Original error"] });
+  expect(await call()).toMatchObject({ errors: ["Original error"] });
+  expect(h.paid).toHaveBeenCalledTimes(1);
+});
+it("cannot hide unresolved credit operations behind fresh contact data", async () => {
+  h.recent.mockResolvedValue(true);
+  h.existing.mockResolvedValue(true);
+  h.paid.mockRejectedValue(new Error("Unresolved"));
+  await expect(call()).rejects.toThrow("Unresolved");
 });

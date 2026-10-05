@@ -1,5 +1,5 @@
 import { isHostedMode } from "@/lib/auth/workspace";
-import { executePaidAction } from "@/lib/billing/paid-action";
+import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 import { isRecentlyEnriched } from "@/lib/services/knowledge-base";
@@ -145,6 +145,16 @@ async function enrichRequest(request: Request) {
 
   const person = personData as unknown as PersonForEnrichment;
 
+  const paidInput = {
+    identity: { userId: user.id, source: "web" as const },
+    key: request.headers.get("Idempotency-Key"),
+    kind: "contact.enrich.web",
+    request: { personId },
+  };
+
+  const hosted = isHostedMode();
+  const existing = hosted && await hasPaidAction(paidInput);
+
   // Check recency
   const recent = await isRecentlyEnriched(
     "people",
@@ -152,7 +162,7 @@ async function enrichRequest(request: Request) {
     7,
     isHostedMode(),
   );
-  if (recent) {
+  if (recent && !existing) {
     const { data: p, error: cachedError } = await supabase
       .from("people")
       .select("enrichment_data")
@@ -167,9 +177,8 @@ async function enrichRequest(request: Request) {
     });
   }
 
-  const hosted = isHostedMode();
   if (
-    hosted &&
+    hosted && !existing &&
     (!person.name || person.name === "Unknown") &&
     !person.linkedin_url &&
     !person.twitter_url
@@ -183,12 +192,7 @@ async function enrichRequest(request: Request) {
   };
   const result = hosted
     ? await executePaidAction(
-        {
-          identity: { userId: user.id, source: "web" },
-          key: request.headers.get("Idempotency-Key"),
-          kind: "contact.enrich.web",
-          request: { personId },
-        },
+        paidInput,
         work,
       )
     : await work();

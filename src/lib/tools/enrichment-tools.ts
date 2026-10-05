@@ -614,11 +614,18 @@ async function enrichContactById(
     throw new Error("Could not read contact status");
   const stuckInProgress = statusRow?.enrichment_status === "in_progress";
 
-  // Check recency -- skip if recently enriched
+  const paidInput = {
+    identity: getCurrentIdentity() ?? { userId: session.userId, source: "web" as const },
+    key: operationKey ?? null,
+    kind: "contact.enrich",
+    request: { personId, linkedinUrl: linkedinUrl ?? null, twitterUrl: twitterUrl ?? null },
+  };
+
+  // New cache reads are free; existing operations must replay through billing.
   const recent =
     !stuckInProgress &&
     (await isRecentlyEnriched("people", personId, 7, isHostedMode()));
-  if (recent) {
+  if (recent && (!isHostedMode() || !(await hasPaidAction(paidInput)))) {
     const { data: person } = await supabase
       .from("people")
       .select("enrichment_data")
@@ -665,19 +672,7 @@ async function enrichContactById(
     );
   if (!isHostedMode()) return research();
   return executePaidAction(
-    {
-      identity: getCurrentIdentity() ?? {
-        userId: session.userId,
-        source: "web",
-      },
-      key: operationKey ?? null,
-      kind: "contact.enrich",
-      request: {
-        personId,
-        linkedinUrl: linkedinUrl ?? null,
-        twitterUrl: twitterUrl ?? null,
-      },
-    },
+    paidInput,
     research,
   );
 }
