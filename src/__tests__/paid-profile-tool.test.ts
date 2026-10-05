@@ -1,6 +1,9 @@
+import { executeWithCredits } from "@/lib/billing/credit-execution";
+vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: () => ({ rpc: h.rpc }) }));
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  rpc: vi.fn(),
   existing: vi.fn(),
   research: vi.fn(),
   profile: {
@@ -110,4 +113,20 @@ it("still rejects a new profile research request without a URL", async () => {
   h.profile.company_url = "";
   expect(await execute({ profileId: h.profile.id, operationId: key })).toHaveProperty("error");
   expect(h.paid).not.toHaveBeenCalled();
+});
+
+it("finishes an unstarted reservation at zero charge when all profile URLs were removed", async () => {
+  h.profile.company_url = "";
+  h.existing.mockResolvedValue(true);
+  h.research.mockResolvedValue({ ok: false, error: "No usable URLs" });
+  h.rpc.mockImplementation(async (name, args) => ({ data:
+    name === "reserve_credit_quote" ? { id: args.p_key, state: "reserved", credits: 5 } : true,
+  }));
+  h.paid.mockImplementation((input, work) => executeWithCredits({
+    ...input, identity: { ...input.identity, workspaceId: "workspace" }, credits: 5, rateVersion: "v1",
+  }, work));
+  expect(await execute({ profileId: h.profile.id, operationId: key })).toHaveProperty("error");
+  expect(h.research).not.toHaveBeenCalled();
+  expect(h.rpc).toHaveBeenCalledWith("finish_serialized_credit_result", expect.objectContaining({ p_charged: 0 }));
+  expect(h.rpc.mock.calls.some(([name]) => name === "mark_credit_operation_uncertain")).toBe(false);
 });

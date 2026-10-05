@@ -599,6 +599,10 @@ function FactBankSection({
       } else {
         if (sessionStorage.getItem(storageKey) === operationKey)
           sessionStorage.removeItem(storageKey);
+        if (json.error) {
+          setResearchError(json.error);
+          return;
+        }
         // A failed refetch keeps the current list on screen: wiping it right
         // after "+N facts added" makes research look like it deleted the bank.
         try {

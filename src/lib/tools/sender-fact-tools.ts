@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
+import { NoBillableWork } from "@/lib/billing/credit-execution";
 import { toolOperationKey } from "@/lib/billing/tool-operation-key";
 import { getCurrentIdentity } from "@/lib/auth/identity";
 import { isHostedMode } from "@/lib/auth/workspace";
@@ -103,15 +104,24 @@ export const researchSenderProfile = tool({
       profile.company_url,
       profile.twitter_url,
     ];
+    const hasSources = urls.some((url) => url?.trim() && hostOf(url));
     if (isHostedMode()) {
       if ((profile as UserProfile & { user_id?: string }).user_id !== userId)
         return { error: NO_PROFILE_ERROR };
-      if (!urls.some((url) => url?.trim() && hostOf(url)) && !(await hasPaidAction(paidInput)))
+      if (!hasSources && !(await hasPaidAction(paidInput)))
         return { error: "Add a usable profile URL before researching." };
     }
-    return executePaidAction(
+    return executePaidAction<
+      { error: string } | {
+        ok: boolean; added: number; skippedAsDuplicates: number;
+        facts: ReturnType<typeof groupFactsByCategory>; message?: string;
+      }
+    >(
       paidInput,
       async () => {
+        if (isHostedMode() && !hasSources) return new NoBillableWork({
+          error: "Add a usable profile URL before researching. No credits were charged.",
+        });
         const result = await researchSender(profile, userId);
         if (!result.ok) {
           if (isHostedMode()) throw new Error(result.error);
