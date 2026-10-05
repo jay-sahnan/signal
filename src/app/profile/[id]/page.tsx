@@ -491,6 +491,7 @@ function FactBankSection({
   const [researching, setResearching] = useState(false);
   const [researchNote, setResearchNote] = useState<string | null>(null);
   const [researchError, setResearchError] = useState<string | null>(null);
+  const [researchSettled, setResearchSettled] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -576,6 +577,7 @@ function FactBankSection({
     setResearching(true);
     setResearchNote(null);
     setResearchError(null);
+    setResearchSettled(false);
     try {
       if (!userId) throw new Error("Sign in before researching.");
       // Keep the same operation across retries and reloads until success.
@@ -600,6 +602,7 @@ function FactBankSection({
         if (sessionStorage.getItem(storageKey) === operationKey)
           sessionStorage.removeItem(storageKey);
         if (json.error) {
+          setResearchSettled(true);
           setResearchError(json.error);
           return;
         }
@@ -655,11 +658,11 @@ function FactBankSection({
           <p role="alert" className="text-destructive text-sm">
             {researchError}
           </p>
-          <p className="text-muted-foreground text-sm">
+          {!researchSettled && <p className="text-muted-foreground text-sm">
             Use Research my profile to retry the same request. Credits may remain
             reserved while its outcome is unresolved. Contact support if the
             request stays pending.
-          </p>
+          </p>}
         </div>
       )}
       {researchNote && (

@@ -1,7 +1,8 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
-import { NoBillableWork } from "@/lib/billing/credit-execution";
+import { getWebBillingTurn } from "@/lib/billing/web-billing-turn";
+import { NoBillableWork, requestHash } from "@/lib/billing/credit-execution";
 import { toolOperationKey } from "@/lib/billing/tool-operation-key";
 import { getCurrentIdentity } from "@/lib/auth/identity";
 import { isHostedMode } from "@/lib/auth/workspace";
@@ -111,16 +112,18 @@ export const researchSenderProfile = tool({
       if (!hasSources && !(await hasPaidAction(paidInput)))
         return { error: "Add a usable profile URL before researching." };
     }
-    return executePaidAction<
-      { error: string } | {
+    const sourceRevision = requestHash({ urls: urls.map(url => url ?? null), name: profile.name ?? null });
+    const outcome = await executePaidAction<
+      ({ error: string } | {
         ok: boolean; added: number; skippedAsDuplicates: number;
         facts: ReturnType<typeof groupFactsByCategory>; message?: string;
-      }
+      }) & { sourceRevision?: string }
     >(
       paidInput,
       async () => {
         if (isHostedMode() && !hasSources) return new NoBillableWork({
           error: "Add a usable profile URL before researching. No credits were charged.",
+          sourceRevision,
         });
         const result = await researchSender(profile, userId);
         if (!result.ok) {
@@ -142,6 +145,7 @@ export const researchSenderProfile = tool({
 
         if (survivors.length === 0) {
           return {
+            sourceRevision,
             ok: true,
             added: 0,
             skippedAsDuplicates,
@@ -166,6 +170,7 @@ export const researchSenderProfile = tool({
         if (error) throw new Error(`Failed to save facts: ${error.message}`);
 
         return {
+          sourceRevision,
           ok: true,
           added: inserted?.length ?? survivors.length,
           skippedAsDuplicates,
@@ -173,6 +178,13 @@ export const researchSenderProfile = tool({
         };
       },
     );
+    if (identity.source === "web" && getWebBillingTurn() && outcome.sourceRevision
+      && outcome.sourceRevision !== sourceRevision) return {
+      error: "Profile sources changed after this turn's research. Send a new message to research the updated profile. No additional credits were charged.",
+    };
+    const response = { ...outcome };
+    delete response.sourceRevision;
+    return response;
   },
 });
 

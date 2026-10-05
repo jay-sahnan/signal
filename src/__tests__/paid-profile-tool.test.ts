@@ -1,4 +1,5 @@
-import { executeWithCredits } from "@/lib/billing/credit-execution";
+import { withWebBillingTurn } from "@/lib/billing/web-billing-turn";
+import { executeWithCredits, requestHash } from "@/lib/billing/credit-execution";
 vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: () => ({ rpc: h.rpc }) }));
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
@@ -128,5 +129,20 @@ it("finishes an unstarted reservation at zero charge when all profile URLs were 
   expect(await execute({ profileId: h.profile.id, operationId: key })).toHaveProperty("error");
   expect(h.research).not.toHaveBeenCalled();
   expect(h.rpc).toHaveBeenCalledWith("finish_serialized_credit_result", expect.objectContaining({ p_charged: 0 }));
-  expect(h.rpc.mock.calls.some(([name]) => name === "mark_credit_operation_uncertain")).toBe(false);
+  expect(h.rpc.mock.calls.some(([name, args]) => name === "finish_credit_operation" && args.p_state === "uncertain")).toBe(false);
+});
+
+it("does not present old research as current after source edits within one chat turn", async () => {
+  const revision = requestHash({ urls: [null, null, "https://example.com", null], name: null });
+  h.paid.mockResolvedValue({ ok: true, added: 2, sourceRevision: revision });
+  await withWebBillingTurn("turn", async () => {
+    const original = await execute({ profileId: h.profile.id }, "web");
+    expect(original).toMatchObject({ ok: true, added: 2 });
+    expect(original).not.toHaveProperty("sourceRevision");
+    h.profile.company_url = "https://changed.example";
+    const result = await execute({ profileId: h.profile.id }, "web");
+    expect(result).toMatchObject({ error: expect.stringContaining("new message") });
+    expect(result).not.toHaveProperty("added");
+  });
+  expect(h.research).not.toHaveBeenCalled();
 });
