@@ -11,6 +11,7 @@ import { TogglePill } from "@/components/ui/toggle-pill";
 import { SignalCard } from "@/components/signals/signal-card";
 import { SignalDetailDialog } from "@/components/signals/signal-detail-dialog";
 import { useCampaign } from "@/lib/campaign-context";
+import { setCampaignSignal, preferPrivateSignalCopies } from "@/lib/signals/community-copies";
 import { createClient } from "@/lib/supabase/client";
 import type { Signal, SignalCategory } from "@/lib/types/signal";
 import type { Campaign } from "@/lib/types/campaign";
@@ -154,17 +155,18 @@ function SignalsPageContent() {
     if (!selectedCampaignId) return;
     setEnabledMap((prev) => ({ ...prev, [signalId]: enabled }));
     const supabase = createClient();
-    const { error } = await supabase.from("campaign_signals").upsert(
-      {
-        campaign_id: selectedCampaignId,
-        signal_id: signalId,
-        enabled,
-      },
-      { onConflict: "campaign_id,signal_id" },
-    );
+    const { data: link, error } = await setCampaignSignal(supabase, selectedCampaignId, signalId, enabled);
+    if (togglesRequestRef.current !== selectedCampaignId) {
+      if (!error) await fetchData();
+      return;
+    }
     if (error) {
       toast.error("Failed to toggle signal");
       setEnabledMap((prev) => ({ ...prev, [signalId]: !enabled }));
+    } else if (link?.signal_id !== signalId) {
+      await fetchData();
+      if (togglesRequestRef.current === selectedCampaignId) await fetchToggles(selectedCampaignId);
+      toast.success("Community signal copied to your workspace");
     }
   };
 
@@ -213,7 +215,7 @@ function SignalsPageContent() {
     }
   };
 
-  const filtered = signals.filter((s) => {
+  const filtered = preferPrivateSignalCopies(signals).filter((s) => {
     if (activeCategory === "all") return true;
     if (activeCategory === "community") return s.is_public && !s.is_builtin;
     return s.category === activeCategory;

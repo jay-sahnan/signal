@@ -26,6 +26,7 @@ export interface Signal {
   is_builtin: boolean;
   is_public: boolean;
   created_by: string | null;
+  source_signal_id?: string | null;
   created_at: string;
   updated_at: string;
 }

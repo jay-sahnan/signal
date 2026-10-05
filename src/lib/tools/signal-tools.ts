@@ -1,3 +1,4 @@
+import { setCampaignSignal, preferPrivateSignalCopies } from "@/lib/signals/community-copies";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { tool } from "ai";
@@ -268,7 +269,7 @@ export const getCampaignSignals = tool({
       ]),
     );
 
-    const result = (allSignals ?? []).map((s: Record<string, unknown>) => {
+    const result = preferPrivateSignalCopies(allSignals ?? []).map((s: Record<string, unknown>) => {
       const toggle = toggleMap.get(s.id as string) as
         | Record<string, unknown>
         | undefined;
@@ -301,18 +302,9 @@ export const toggleCampaignSignal = tool({
   execute: async (input) => {
     const supabase = await createClient();
 
-    const { data, error } = await supabase
-      .from("campaign_signals")
-      .upsert(
-        {
-          campaign_id: input.campaignId,
-          signal_id: input.signalId,
-          enabled: input.enabled,
-        },
-        { onConflict: "campaign_id,signal_id" },
-      )
-      .select("*")
-      .single();
+    const { data, error } = await setCampaignSignal(
+      supabase, input.campaignId, input.signalId, input.enabled,
+    );
 
     if (error) throw new Error(`Failed to toggle signal: ${error.message}`);
     return {
