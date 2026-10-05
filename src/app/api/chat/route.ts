@@ -21,6 +21,8 @@ import { buildSystemPrompt } from "@/lib/system-prompt";
 import { allTools } from "@/lib/tools";
 import { saveChat } from "@/lib/services/chat-history";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
+import { isHostedMode } from "@/lib/auth/workspace";
+import { bindWebBillingTurn, webBillingTurnId } from "@/lib/billing/web-billing-turn";
 import { trimMessages } from "@/lib/chat/trim-messages";
 
 // Full-pipeline agent runs (enrich → score → find contacts) regularly exceed
@@ -77,6 +79,10 @@ export async function POST(request: Request) {
   };
   const persistChatId =
     typeof chatId === "string" && UUID_RE.test(chatId) ? chatId : null;
+
+  const billingTurn = isHostedMode() ? webBillingTurnId(persistChatId, uiMessages) : null;
+  if (isHostedMode() && !billingTurn)
+    return Response.json({ error: "A chat and stable user message ID are required" }, { status: 400 });
 
   // The active email-voice run, when the deck has one. Fully validated and
   // bounded before any tool sees it: the transcript is client-controlled text
@@ -146,7 +152,7 @@ export async function POST(request: Request) {
         model: anthropic(MODELS.CHAT),
         system: systemPrompt,
         messages: modelMessages,
-        tools: allTools,
+        tools: billingTurn ? bindWebBillingTurn(allTools, billingTurn) : allTools,
         maxOutputTokens: 8192,
         // Full-pipeline agent runs (enrich → score → find contacts → draft)
         // routinely take 20+ steps; at 15 the loop halted silently mid-batch

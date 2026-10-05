@@ -29,6 +29,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     },
   }),
 }));
+import { withWebBillingTurn } from "@/lib/billing/web-billing-turn";
 import { runWithIdentity } from "@/lib/auth/identity";
 import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 const input = {
@@ -160,4 +161,33 @@ it("does not look up self-hosted or keyless free cache reads", async () => {
   expect(await hasPaidAction(input)).toBe(false);
   expect(h.resolve).not.toHaveBeenCalled();
   expect(h.lookup).not.toHaveBeenCalled();
+});
+
+it("reuses a logical chat action across regenerated tool-call keys", async () => {
+  await withWebBillingTurn("chat:user-message", () => executePaidAction(input, async () => null));
+  await withWebBillingTurn("chat:user-message", () => executePaidAction({
+    ...input, key: "b2222222-2222-4222-8222-222222222222",
+  }, async () => null));
+  expect(h.execute.mock.calls[0][0].key).toBe(h.execute.mock.calls[1][0].key);
+});
+it("separates user turns and different paid inputs within a turn", async () => {
+  for (const [turn, request] of [
+    ["turn1", { profileId: "profile" }],
+    ["turn2", { profileId: "profile" }],
+    ["turn1", { profileId: "other" }],
+  ] as const) await withWebBillingTurn(turn, () => executePaidAction({ ...input, request }, async () => null));
+  expect(new Set(h.execute.mock.calls.map(([value]) => value.key)).size).toBe(3);
+});
+it("finds existing chat actions using the same canonical key as execution", async () => {
+  await withWebBillingTurn("turn", async () => {
+    await executePaidAction(input, async () => null);
+    await hasPaidAction({ ...input, key: "b2222222-2222-4222-8222-222222222222" });
+  });
+  expect(h.filters).toContainEqual(["operation_key", h.execute.mock.calls[0][0].key]);
+});
+it("does not replace explicit MCP keys inside a web turn context", async () => {
+  const mcp = { ...input, identity: { ...input.identity, source: "mcp" as const } };
+  await executePaidAction(mcp, async () => null);
+  await withWebBillingTurn("turn", () => executePaidAction(mcp, async () => null));
+  expect(h.execute.mock.calls[0][0].key).toBe(h.execute.mock.calls[1][0].key);
 });

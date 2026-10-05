@@ -162,7 +162,7 @@ function ChatView({
         isLoading={isLoading}
         onSuggestionClick={handleSuggestionClick}
       />
-      {error && <ChatErrorBanner error={error} onRetry={() => regenerate()} />}
+      {error && <ChatErrorBanner error={error} onRetry={() => regenerate(requestOptions)} />}
       <ChatInput
         input={input}
         isLoading={isLoading}

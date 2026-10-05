@@ -359,7 +359,7 @@ function AgentPanelInner({
         suggestions={getSuggestions(pathname ?? "", campaignId)}
       />
 
-      {error && <ChatErrorBanner error={error} onRetry={() => regenerate()} />}
+      {error && <ChatErrorBanner error={error} onRetry={() => regenerate(buildRequestOptions())} />}
 
       <ChatInput
         input={input}
