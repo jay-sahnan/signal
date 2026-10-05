@@ -3,7 +3,7 @@ const h = vi.hoisted(() => ({ paid: vi.fn(), hosted: true }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
 vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
 import { paidContactDiscovery } from "@/lib/billing/contact-discovery";
-import { NoBillableWork } from "@/lib/billing/credit-execution";
+import { NoBillableWork, CompletedWithoutCharge } from "@/lib/billing/credit-execution";
 import type { ContactDiscoveryResult } from "@/lib/services/contact-discovery";
 const input = { identity: { userId: "owner", source: "web" as const }, key: "11111111-1111-4111-8111-111111111111", request: { organizationId: "org" } };
 const result = (extra = {}): ContactDiscoveryResult => ({
@@ -35,8 +35,8 @@ it("marks only trusted pre-provider refusal as zero-charge work", async () => {
   expect(await paidContactDiscovery(input, async () => result({ noBillableWork: true, error: "No domain" }))).toHaveProperty("error");
 });
 it("does not settle a complete search failure as successful discovery", async () => {
-  await expect(paidContactDiscovery(input, async () => result({ sourcesSucceeded: 0, searchesRun: [{ error: "Unavailable" }] })))
-    .rejects.toThrow("Contact discovery sources failed");
+  expect(await paidContactDiscovery(input, async () => result({ sourcesSucceeded: 0, searchesRun: [{ error: "Unavailable" }] })))
+    .toBeInstanceOf(CompletedWithoutCharge);
 });
 it("accepts useful partial research at the configured flat rate", async () => {
   const partial = result({ contacts: [{ id: "person" }], totalFound: 1, searchesRun: [{ error: "Unavailable" }] });
@@ -50,6 +50,6 @@ it("preserves self-hosted error results without billing", async () => {
 });
 
 it("does not charge when a domain-only request has no successful source", async () => {
-  await expect(paidContactDiscovery(input, async () => result({ sourcesSucceeded: 0, searchesRun: [] })))
-    .rejects.toThrow("Contact discovery sources failed");
+  expect(await paidContactDiscovery(input, async () => result({ sourcesSucceeded: 0, searchesRun: [] })))
+    .toBeInstanceOf(CompletedWithoutCharge);
 });

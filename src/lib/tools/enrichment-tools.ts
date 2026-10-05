@@ -2059,7 +2059,7 @@ export const setCompanyWebsite = tool({
 
 export const findContacts = tool({
   description:
-    "Find contacts at a specific company by searching for target titles on LinkedIn. When campaignId is provided, uses the campaign's ICP target titles and links contacts to the campaign. When used without a campaign, requires explicit titles. Hosted discovery uses a flat credit charge per company, including useful partial results; pre-provider refusals cost zero. Reuse operationId when retrying. Pass either companyId (campaign-organization link) or organizationId (direct).",
+    "Find contacts at a specific company by searching for target titles on LinkedIn. When campaignId is provided, uses the campaign's ICP target titles and links contacts to the campaign. When used without a campaign, requires explicit titles. Hosted discovery uses a flat credit charge per company, including useful partial results; pre-provider refusals and completed total source failures cost zero. Reuse operationId when retrying an unresolved request; start a new operation after a terminal source failure. Pass either companyId (campaign-organization link) or organizationId (direct).",
   inputSchema: z.object({
     operationId: z.string().uuid().optional().describe("Required for hosted MCP: a stable UUID reused for retries of this request."),
     companyId: z

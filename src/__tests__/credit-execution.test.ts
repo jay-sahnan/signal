@@ -4,7 +4,7 @@ vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
 vi.mock("@/lib/supabase/admin", () => ({
   getAdminClient: () => ({ rpc: h.rpc }),
 }));
-import { executeWithCredits, NoBillableWork } from "@/lib/billing/credit-execution";
+import { executeWithCredits, NoBillableWork, CompletedWithoutCharge } from "@/lib/billing/credit-execution";
 import { getCurrentIdentity } from "@/lib/auth/identity";
 const input = {
   identity: {
@@ -222,4 +222,14 @@ it("replays completed work without running preparation", async () => {
   const prepare = vi.fn().mockRejectedValue(new Error("Metadata unavailable"));
   expect(await executeWithCredits(input, vi.fn(), prepare)).toEqual({ found: 2 });
   expect(prepare).not.toHaveBeenCalled();
+});
+
+it("durably waives completed failed research and replays it without another provider call", async () => {
+  const result = { error: "All sources failed. No credits charged." };
+  expect(await executeWithCredits(input, async () => new CompletedWithoutCharge(result))).toEqual(result);
+  expect(h.rpc).toHaveBeenLastCalledWith("finish_serialized_credit_result", expect.objectContaining({ p_charged: 0 }));
+  h.rpc.mockImplementation(async name => ({ data: name === "read_serialized_credit_result" ? JSON.stringify(result) : { id: "operation", state: "succeeded" }, error: null }));
+  const work = vi.fn();
+  expect(await executeWithCredits(input, work)).toEqual(result);
+  expect(work).not.toHaveBeenCalled();
 });
