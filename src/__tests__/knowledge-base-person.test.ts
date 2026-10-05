@@ -149,3 +149,14 @@ it("still reuses recently completed contact data", async () => {
   people = [{ id: "person", enrichment_status: "enriched", enrichment_data: {}, last_enriched_at: new Date().toISOString() }];
   expect(await isRecentlyEnriched("people", "person", 7, true)).toBe(true);
 });
+
+it("requires an affected row when a paid caller requests write confirmation", async () => {
+  const client = { from: () => {
+    const q = { select: () => q, eq: () => q, update: () => q,
+      single: async () => ({ data: { enrichment_data: {} }, error: null }),
+      maybeSingle: async () => ({ data: null, error: null }),
+      then: (resolve: (value: unknown) => unknown) => resolve({ error: null }) };
+    return q;
+  } };
+  await expect(mergeEnrichmentData("people", "p1", {}, "enriched", client as never, true)).rejects.toThrow(/not saved/i);
+});
