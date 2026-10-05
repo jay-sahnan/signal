@@ -163,10 +163,11 @@ function SignalsPageContent() {
     if (error) {
       toast.error("Failed to toggle signal");
       setEnabledMap((prev) => ({ ...prev, [signalId]: !enabled }));
-    } else if (link?.signal_id !== signalId) {
+    } else if (link && link.signal_id !== signalId) {
+      setEnabledMap(prev => ({ ...prev, [link.signal_id]: link.enabled }));
       await fetchData();
-      if (togglesRequestRef.current === selectedCampaignId) await fetchToggles(selectedCampaignId);
-      toast.success("Community signal copied to your workspace");
+      if (togglesRequestRef.current === selectedCampaignId)
+        toast.success("Community signal copied to your workspace");
     }
   };
 
@@ -217,7 +218,7 @@ function SignalsPageContent() {
 
   const filtered = preferPrivateSignalCopies(signals).filter((s) => {
     if (activeCategory === "all") return true;
-    if (activeCategory === "community") return s.is_public && !s.is_builtin;
+    if (activeCategory === "community") return !s.is_builtin && (s.is_public || !!s.source_signal_id);
     return s.category === activeCategory;
   });
 
