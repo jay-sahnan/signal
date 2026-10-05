@@ -8,6 +8,12 @@ do $$ declare w uuid; op public.credit_operations; begin
   select id into w from public.workspaces where owner_user_id = 'quote-owner';
   op := public.reserve_credit_quote(w,'quote-owner','stable',repeat('a',64),'research','web',10,'v2');
   if op.credits <> 5 or op.rate_version <> 'v1' then raise exception 'Retry repriced existing operation'; end if;
+  op := public.reserve_credit_quote(w,'quote-owner','stable',repeat('a',64),'research','web',null,null);
+  if op.credits <> 5 then raise exception 'Existing quote unavailable after rate removal'; end if;
+  begin
+    perform public.reserve_credit_quote(w,'quote-owner','missing-rate',repeat('a',64),'research','web',null,null);
+    raise exception 'Unconfigured work reserved credits';
+  exception when check_violation then null; end;
   if (select sum(reserved) from public.credit_grants where workspace_id = w) <> 5 then raise exception 'Retry reserved twice'; end if;
   begin
     perform public.reserve_credit_quote(w,'quote-owner','stable',repeat('b',64),'research','web',10,'v2');

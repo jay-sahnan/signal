@@ -39,7 +39,15 @@ export async function executePaidAction<T>(
   if (input.identity.workspaceId && input.identity.workspaceId !== workspaceId)
     throw new CreditExecutionError("Workspace mismatch", 403);
   const units = input.units ?? 1;
-  const quote = quoteCredits(input.kind, units);
+  let quote: { credits: number | null; rateVersion: string | null } = {
+    credits: null,
+    rateVersion: null,
+  };
+  try {
+    quote = quoteCredits(input.kind, units);
+  } catch {
+    // The ledger may reuse an existing immutable quote. Null cannot fund new work.
+  }
   // Workspace members and separate action types cannot collide on a supplied UUID.
   const key = createHash("sha256")
     .update(

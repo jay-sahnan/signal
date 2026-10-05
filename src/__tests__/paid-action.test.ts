@@ -98,3 +98,15 @@ it("rejects a nested charge even when the caller reconstructs its identity", asy
   ).rejects.toMatchObject({ status: 409 });
   expect(h.execute).not.toHaveBeenCalled();
 });
+it("lets the ledger recover an existing quote when current rates are removed", async () => {
+  h.quote.mockImplementation(() => {
+    throw new Error("Rate unavailable");
+  });
+  await expect(executePaidAction(input, async () => "replay")).resolves.toBe(
+    "replay",
+  );
+  expect(h.execute).toHaveBeenCalledWith(
+    expect.objectContaining({ credits: null, rateVersion: null }),
+    expect.any(Function),
+  );
+});

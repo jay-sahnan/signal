@@ -37,8 +37,8 @@ type CreditExecution = {
   kind: string;
   request: unknown;
   /** Trusted server quote; never copy credit amounts from request bodies. */
-  credits: number;
-  rateVersion: string;
+  credits: number | null;
+  rateVersion: string | null;
 };
 
 /** Caller supplies verified identity and a durable operation key reused on retries. */
