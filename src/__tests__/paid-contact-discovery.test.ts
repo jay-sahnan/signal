@@ -32,7 +32,7 @@ it("marks only trusted pre-provider refusal as zero-charge work", async () => {
     expect(outcome).toBeInstanceOf(NoBillableWork);
     return outcome.value;
   });
-  expect(await paidContactDiscovery(input, async () => result({ noBillableWork: true, error: "No domain" }))).toHaveProperty("error");
+  expect(await paidContactDiscovery(input, async () => result({ noBillableWork: true, error: "No domain" }))).toHaveProperty("error", expect.stringContaining("new discovery request"));
 });
 it("does not settle a complete search failure as successful discovery", async () => {
   expect(await paidContactDiscovery(input, async () => result({ sourcesSucceeded: 0, searchesRun: [{ error: "Unavailable" }] })))

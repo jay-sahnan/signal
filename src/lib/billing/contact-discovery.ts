@@ -10,7 +10,9 @@ export async function paidContactDiscovery<T extends ContactDiscoveryResult>(inp
   if (!isHostedMode()) return work();
   return executePaidAction<T>({ ...input, kind: "contact.discover" }, async () => {
     const result = await work();
-    if (result.noBillableWork) return new NoBillableWork(result);
+    if (result.noBillableWork) return new NoBillableWork({ ...result,
+      error: `${result.error ?? "Discovery could not start."} No credits were charged. After fixing the issue, start a new discovery request.`,
+    });
     if (result.contacts.length === 0 && result.sourcesSucceeded === 0) {
       return new CompletedWithoutCharge({ ...result,
         error: "All contact discovery sources failed. No credits were charged. Start a new request to try again.",
