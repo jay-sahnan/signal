@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  existing: vi.fn(),
   research: vi.fn(),
   profile: {
     id: "11111111-1111-4111-8111-111111111111",
@@ -12,7 +13,7 @@ vi.mock("@/lib/auth/acting-user", () => ({
   actingUserId: async () => "owner",
 }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => true }));
-vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
+vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid, hasPaidAction: h.existing }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     from: () => ({
@@ -42,6 +43,8 @@ const execute = (
   );
 beforeEach(() => {
   vi.clearAllMocks();
+  h.existing.mockResolvedValue(false);
+  h.profile.company_url = "https://example.com";
   h.profile.user_id = "owner";
   h.paid.mockResolvedValue({ ok: true, added: 2 });
 });
@@ -88,4 +91,23 @@ it("blocks provider work when the credit ledger denies the action", async () => 
     execute({ profileId: h.profile.id, operationId: key }),
   ).rejects.toThrow("Insufficient credits");
   expect(h.research).not.toHaveBeenCalled();
+});
+
+it("binds retries to the owned profile rather than mutable source fields", async () => {
+  await execute({ profileId: h.profile.id, operationId: key });
+  h.profile.company_url = "https://changed.example";
+  await execute({ profileId: h.profile.id, operationId: key });
+  expect(h.paid.mock.calls[0][0].request).toEqual({ profileId: h.profile.id });
+  expect(h.paid.mock.calls[1][0].request).toEqual(h.paid.mock.calls[0][0].request);
+});
+it("recovers existing research after the last profile URL is removed", async () => {
+  h.profile.company_url = "";
+  h.existing.mockResolvedValue(true);
+  expect(await execute({ profileId: h.profile.id, operationId: key })).toEqual({ ok: true, added: 2 });
+  expect(h.research).not.toHaveBeenCalled();
+});
+it("still rejects a new profile research request without a URL", async () => {
+  h.profile.company_url = "";
+  expect(await execute({ profileId: h.profile.id, operationId: key })).toHaveProperty("error");
+  expect(h.paid).not.toHaveBeenCalled();
 });

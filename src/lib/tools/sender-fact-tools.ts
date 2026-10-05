@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { executePaidAction } from "@/lib/billing/paid-action";
+import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 import { toolOperationKey } from "@/lib/billing/tool-operation-key";
 import { getCurrentIdentity } from "@/lib/auth/identity";
 import { isHostedMode } from "@/lib/auth/workspace";
@@ -90,6 +90,13 @@ export const researchSenderProfile = tool({
     if (!profile) return { error: NO_PROFILE_ERROR };
 
     const identity = getCurrentIdentity() ?? { userId, source: "web" as const };
+    const paidInput = {
+      identity,
+      key: toolOperationKey(identity.source, input.operationId, opts.toolCallId),
+      kind: "profile.research",
+      // Source fields are server state, not a new caller request on retry.
+      request: { profileId: profile.id },
+    };
     const urls = [
       profile.linkedin_url,
       profile.personal_url,
@@ -99,25 +106,11 @@ export const researchSenderProfile = tool({
     if (isHostedMode()) {
       if ((profile as UserProfile & { user_id?: string }).user_id !== userId)
         return { error: NO_PROFILE_ERROR };
-      if (!urls.some((url) => url?.trim() && hostOf(url)))
+      if (!urls.some((url) => url?.trim() && hostOf(url)) && !(await hasPaidAction(paidInput)))
         return { error: "Add a usable profile URL before researching." };
     }
     return executePaidAction(
-      {
-        identity,
-        key: toolOperationKey(
-          identity.source,
-          input.operationId,
-          opts.toolCallId,
-        ),
-        kind: "profile.research",
-        request: {
-          profileId: profile.id,
-          name: profile.name ?? null,
-          companyName: profile.company_name ?? null,
-          urls: urls.map((url) => url ?? null),
-        },
-      },
+      paidInput,
       async () => {
         const result = await researchSender(profile, userId);
         if (!result.ok) {

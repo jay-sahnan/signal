@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   ctx: vi.fn(),
   paid: vi.fn(),
+  existing: vi.fn(),
   research: vi.fn(),
   load: vi.fn(),
   dedupe: vi.fn(),
@@ -13,7 +14,7 @@ const h = vi.hoisted(() => ({
   db: { from: vi.fn() },
 }));
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAndUser: h.ctx }));
-vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
+vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid, hasPaidAction: h.existing }));
 vi.mock("@/lib/services/sender-research", async (original) => ({
   ...(await original<object>()),
   researchSender: h.research,
@@ -33,6 +34,8 @@ const request = () =>
   });
 beforeEach(() => {
   vi.clearAllMocks();
+  h.existing.mockResolvedValue(false);
+  h.profile.company_url = "https://example.com";
   h.ctx.mockResolvedValue({ user: { id: "user" }, supabase: h.db });
   h.db.from.mockReturnValue({
     select: () => ({
@@ -126,4 +129,20 @@ it("rejects unusable URLs before credit reservation", async () => {
   });
   expect((await POST(request())).status).toBe(400);
   expect(h.paid).not.toHaveBeenCalled();
+});
+
+it("keeps the request binding stable after profile URL edits", async () => {
+  h.paid.mockResolvedValue({ added: 2 });
+  await POST(request());
+  h.profile.company_url = "https://changed.example";
+  await POST(request());
+  expect(h.paid.mock.calls[0][0].request).toEqual({ profileId: h.profile.id });
+  expect(h.paid.mock.calls[1][0].request).toEqual(h.paid.mock.calls[0][0].request);
+});
+it("recovers saved results after removing the last profile URL", async () => {
+  h.profile.company_url = "";
+  h.existing.mockResolvedValue(true);
+  h.paid.mockResolvedValue({ added: 2 });
+  expect(await (await POST(request())).json()).toEqual({ added: 2 });
+  expect(h.research).not.toHaveBeenCalled();
 });
