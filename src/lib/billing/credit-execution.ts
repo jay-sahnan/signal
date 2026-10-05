@@ -79,7 +79,15 @@ export async function executeWithCredits<T>(
     credits: number;
     result: T;
   };
-  if (op.state === "succeeded") return op.result;
+  if (op.state === "succeeded") {
+    const replay = await db.rpc("read_credit_result", {
+      p_id: op.id,
+      p_user: identity.userId,
+    });
+    if (replay.error)
+      throw new Error("Credit result unavailable; retry with the same key");
+    return replay.data as T;
+  }
   if (op.state !== "reserved")
     throw new CreditExecutionError(
       "Operation already started or closed; check its outcome before retrying",
@@ -100,14 +108,12 @@ export async function executeWithCredits<T>(
       work,
     );
     const serialized = JSON.stringify(result);
-    // Keep the durable replay under the database limit, including JSONB overhead.
-    // Larger services must return a durable result reference instead of raw blobs.
-    if (serialized === undefined || Buffer.byteLength(serialized) > 32_768)
+    // Large research responses live separately from the compact credit ledger.
+    if (serialized === undefined || Buffer.byteLength(serialized) > 1_000_000)
       throw new Error("Credit result requires a durable reference");
-    const settled = await db.rpc("finish_credit_operation", {
+    const settled = await db.rpc("finish_credit_result", {
       p_id: op.id,
       p_user: identity.userId,
-      p_state: "succeeded",
       p_charged: op.credits,
       p_result: JSON.parse(serialized),
     });
@@ -115,7 +121,7 @@ export async function executeWithCredits<T>(
       throw new Error(
         "Credit settlement unavailable; result needs reconciliation",
       );
-    return result;
+    return JSON.parse(serialized) as T;
   } catch (error) {
     // A timeout may have happened after the provider acted. Never refund or rerun
     // automatically; even a failed uncertainty write leaves the operation running.
