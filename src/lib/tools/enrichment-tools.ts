@@ -543,20 +543,9 @@ type SummarySource = {
   text: string | null;
 };
 
-async function enrichContactById(
-  personId: string,
-  linkedinUrl?: string,
-  twitterUrl?: string,
-  operationKey?: string | null,
-): Promise<{
-  contactId: string;
-  status: string;
-  summary: Record<string, number | boolean>;
-  skipped?: boolean;
-  errors?: string[];
-}> {
+async function resolvePersonId(personId: string): Promise<string> {
+  personId = personId.toLowerCase();
   const supabase = await createClient();
-
   // Agents routinely pass the campaign_people link ID here instead of the
   // person ID. That used to "enrich" a person that doesn't exist: no name,
   // no socials, nothing to search, ending in status "failed" that the batch
@@ -580,6 +569,26 @@ async function enrichContactById(
     }
     personId = link.person_id;
   }
+
+  return personExists?.id ?? personId;
+}
+
+async function enrichContactById(
+  personId: string,
+  linkedinUrl?: string,
+  twitterUrl?: string,
+  operationKey?: string | null,
+  canonicalId = false,
+): Promise<{
+  contactId: string;
+  status: string;
+  summary: Record<string, number | boolean>;
+  skipped?: boolean;
+  errors?: string[];
+}> {
+  const supabase = await createClient();
+
+  if (!canonicalId) personId = await resolvePersonId(personId);
 
   // Ownership, same test as every sibling path into this code. `people` is a
   // shared pool, and this function writes to it (enrichment_data, title,
@@ -1051,19 +1060,39 @@ export const enrichContacts = tool({
     const failed: Array<{ contactId: string; error: string }> = [];
     let deferred: string[] = [];
 
+    // Resolve aliases before scheduling work or assigning paid child keys.
+    const hosted = isHostedMode();
+    let contactIds = hosted ? [...new Set(input.contactIds)] : input.contactIds;
+    if (hosted && (!deadlineAt || deadlineAt - Date.now() >= PER_CONTACT_CHUNK_ESTIMATE_MS)) {
+      const ids = contactIds;
+      const resolved = await Promise.allSettled(ids.map((id) =>
+        withTimeout(resolvePersonId(id), 5_000, `Resolve contact ${id}`),
+      ));
+      const canonical = new Set<string>();
+      resolved.forEach((result, index) => {
+        if (result.status === "fulfilled") canonical.add(result.value);
+        else failed.push({
+          contactId: ids[index],
+          error: result.reason instanceof Error ? result.reason.message : "Contact lookup failed",
+        });
+      });
+      contactIds = [...canonical];
+    }
+    const total = contactIds.length + failed.length;
+
     // Process in chunks of 3 to stay under Exa's 10 QPS limit
     // (each contact makes 3-4 Exa searches)
     const CHUNK_SIZE = 3;
-    for (let i = 0; i < input.contactIds.length; i += CHUNK_SIZE) {
+    for (let i = 0; i < contactIds.length; i += CHUNK_SIZE) {
       // Same turn-budget guard as enrichCompanies (see deadlineFrom).
       if (
         deadlineAt &&
         deadlineAt - Date.now() < PER_CONTACT_CHUNK_ESTIMATE_MS
       ) {
-        deferred = input.contactIds.slice(i);
+        deferred = contactIds.slice(i);
         break;
       }
-      const chunk = input.contactIds.slice(i, i + CHUNK_SIZE);
+      const chunk = contactIds.slice(i, i + CHUNK_SIZE);
       const results = await Promise.allSettled(
         chunk.map((id) =>
           enrichContactById(
@@ -1073,6 +1102,7 @@ export const enrichContacts = tool({
             batchKey
               ? toolOperationKey("web", undefined, `${batchKey}:${id}`)
               : null,
+            hosted,
           ),
         ),
       );
@@ -1109,7 +1139,7 @@ export const enrichContacts = tool({
     }
 
     return {
-      total: input.contactIds.length,
+      total,
       succeeded: succeeded.length,
       failed: failed.length,
       results: succeeded,
