@@ -11,6 +11,8 @@ const riskEvents = new Set([
 const checkoutEvents = new Set([
   "checkout.session.completed",
   "checkout.session.async_payment_succeeded",
+  "checkout.session.async_payment_failed",
+  "checkout.session.expired",
 ]);
 const objectId = (value: string | { id: string } | null | undefined) =>
   typeof value === "string" ? value : value?.id;

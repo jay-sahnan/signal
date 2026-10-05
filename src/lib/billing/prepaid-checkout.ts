@@ -72,7 +72,7 @@ export async function beginPrepaidCheckout(account: {
           session.id,
           account.workspaceId,
         );
-        if (state !== "paid")
+        if (state !== "paid" && state !== "failed")
           throw new BillingRequestError(
             "Payment is pending or needs review; refresh your credit balance",
             409,
