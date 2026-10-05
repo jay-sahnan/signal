@@ -1850,7 +1850,7 @@ export const enrichCompany = tool({
 
 export const enrichCompanies = tool({
   description:
-    "Deeply research multiple companies IN PARALLEL. Much faster than calling enrichCompany one by one. Skips any organization recently enriched (within 7 days). Hosted credits are charged per researched company, including partial results; cached enrichment is free.",
+    "Deeply research multiple companies IN PARALLEL. Much faster than calling enrichCompany one by one. Skips any organization recently enriched (within 7 days). Hosted batches collapse duplicate IDs and campaign-link aliases to one company. Hosted credits are charged per researched company, including partial results; cached enrichment is free.",
   inputSchema: z.object({
     operationId: z
       .string()
@@ -1892,17 +1892,35 @@ export const enrichCompanies = tool({
     const failed: Array<{ companyId: string; error: string }> = [];
     let deferred: string[] = [];
 
+    // Link IDs are aliases. Resolve them before assigning child operation keys
+    // or scheduling parallel work, so one company gets one charge per batch.
+    let companyIds = input.companyIds;
+    if (isHostedMode()) {
+      const ids = [...new Set(input.companyIds)];
+      const resolved = await Promise.allSettled(ids.map(resolveOrganizationId));
+      const canonical = new Set<string>();
+      resolved.forEach((result, index) => {
+        if (result.status === "fulfilled") canonical.add(result.value);
+        else failed.push({
+          companyId: ids[index],
+          error: result.reason instanceof Error ? result.reason.message : "Company lookup failed",
+        });
+      });
+      companyIds = [...canonical];
+    }
+    const total = companyIds.length + failed.length;
+
     // Process in chunks of 3 to stay under Exa's 10 QPS limit
     // (each company makes 3-4 Exa searches)
     const CHUNK_SIZE = 3;
-    for (let i = 0; i < input.companyIds.length; i += CHUNK_SIZE) {
+    for (let i = 0; i < companyIds.length; i += CHUNK_SIZE) {
       // Don't start a chunk the turn budget can't absorb: a full batch can
       // legally run CHUNKS × 150s, longer than the whole chat turn.
       if (deadlineAt && deadlineAt - Date.now() < PER_COMPANY_TIMEOUT_MS) {
-        deferred = input.companyIds.slice(i);
+        deferred = companyIds.slice(i);
         break;
       }
-      const chunk = input.companyIds.slice(i, i + CHUNK_SIZE);
+      const chunk = companyIds.slice(i, i + CHUNK_SIZE);
       // Bound each company. Every downstream call has its own timeout, but
       // one company chains enough of them (fetch → Browserbase fetch →
       // browser session → several Exa searches → summarization) that a slow
@@ -1945,7 +1963,7 @@ export const enrichCompanies = tool({
     }
 
     return {
-      total: input.companyIds.length,
+      total,
       succeeded: succeeded.length,
       failed: failed.length,
       results: succeeded,

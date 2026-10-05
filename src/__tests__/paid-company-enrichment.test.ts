@@ -47,6 +47,10 @@ vi.mock("@/lib/supabase/server", () => ({
         organizations: () => [
           { id: "org", name: "Acme", domain: null, enrichment_data: {} },
         ],
+        campaign_organizations: () => [
+          { id: "link-a", organization_id: "org" },
+          { id: "link-b", organization_id: "org" },
+        ],
         campaigns: () => [
           { id: "campaign", user_id: h.campaignOwner, icp: {} },
         ],
@@ -136,4 +140,30 @@ it("uses stable per-company keys for batch retries", async () => {
   expect(h.paid).toHaveBeenCalledTimes(2);
   expect(h.paid.mock.calls[0][0].key).toMatch(/^[0-9a-f-]{36}$/);
   expect(h.paid.mock.calls[0][0].key).toBe(h.paid.mock.calls[1][0].key);
+});
+
+it("deduplicates company aliases before deriving the paid batch key", async () => {
+  const batch = (companyIds: string[]) =>
+    runWithIdentity({ userId: "owner", source: "mcp" }, () =>
+      enrichCompanies.execute!(
+        { companyIds, operationId: key } as never,
+        {} as never,
+      ),
+    );
+  expect(await batch(["link-a", "org", "link-b", "link-a"])).toMatchObject({
+    total: 1, succeeded: 1, failed: 0,
+  });
+  expect(h.paid).toHaveBeenCalledTimes(1);
+  await batch(["link-b"]);
+  expect(h.paid.mock.calls[0][0].key).toBe(h.paid.mock.calls[1][0].key);
+});
+it("reports missing IDs without dropping valid companies from a batch", async () => {
+  const result = await runWithIdentity({ userId: "owner", source: "mcp" }, () =>
+    enrichCompanies.execute!(
+      { companyIds: ["missing", "missing", "link-a"], operationId: key } as never,
+      {} as never,
+    ),
+  );
+  expect(result).toMatchObject({ total: 2, succeeded: 1, failed: 1 });
+  expect(h.paid).toHaveBeenCalledTimes(1);
 });
