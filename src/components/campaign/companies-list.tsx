@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { requestBulkEmailLookup } from "@/lib/billing/bulk-email-request";
+import { requestCompanyEnrichment } from "@/lib/billing/company-enrichment-request";
 import { requestContactEnrichment } from "@/lib/billing/contact-enrichment-request";
 import { requestEmailLookup } from "@/lib/billing/email-lookup-request";
 import { AFFILIATION_SEND_THRESHOLD } from "@/lib/affiliation-threshold";
@@ -206,16 +207,11 @@ export function CompaniesList({
   const enrichCompanyHandler = async (companyId: string) => {
     setEnrichingCompanyIds((prev) => new Set(prev).add(companyId));
     try {
-      const res = await apiFetch("/api/enrich-company", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId, campaignId }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data?.error ?? "Could not enrich this company.");
-        return;
-      }
+      const data = await requestCompanyEnrichment(
+        userId,
+        companyId,
+        campaignId,
+      );
       if (data.enrichmentData) {
         onCompanyEnriched(companyId, data.enrichmentData);
         setExpandedCompanyIds((prev) => new Set(prev).add(companyId));
@@ -223,6 +219,13 @@ export function CompaniesList({
       onDataChanged();
     } catch (err) {
       console.error(`[enrich-company] Failed:`, err);
+      toast.error(
+        err instanceof Error ? err.message : "Company research failed",
+        {
+          description:
+            "Use the research button to retry the same request. Credits may remain reserved while its outcome is unresolved.",
+        },
+      );
     } finally {
       setEnrichingCompanyIds((prev) => {
         const next = new Set(prev);
@@ -673,6 +676,7 @@ export function CompaniesList({
                             size="xs"
                             variant="outline"
                             onClick={() => enrichCompanyHandler(company.id)}
+                            title="Company research and new contact discovery use credits."
                           >
                             Enrich
                           </Button>
@@ -1456,6 +1460,7 @@ function CompaniesWithoutLeads({
                       size="xs"
                       variant="outline"
                       onClick={() => onEnrich(company.id)}
+                      title="Company research and new contact discovery use credits."
                     >
                       Enrich
                     </Button>

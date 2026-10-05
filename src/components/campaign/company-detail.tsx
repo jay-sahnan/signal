@@ -135,6 +135,7 @@ export function CompanyDetail({
               onClick={() => onRefresh(company.id)}
               disabled={isRefreshing}
               aria-label="Re-enrich this company"
+              title="Research this company and discover contacts. New discovery uses credits even when the company profile is cached."
             >
               <RotateCw
                 className={cn("h-3 w-3", isRefreshing && "animate-spin")}
