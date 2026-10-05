@@ -201,7 +201,7 @@ export async function findPeopleOnDomain(
         includeLinks: false,
         timeout: 8000,
       });
-      if (!result.success) uncertainFetch = true;
+      if (result.providerOutcomeUncertain || (!result.success && !result.noBillableWork)) uncertainFetch = true;
       if (
         result.success &&
         (options.strict ? result.data.content.trim().length > 0 : result.data.content.length > 200) &&

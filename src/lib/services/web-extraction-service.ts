@@ -31,6 +31,10 @@ export interface WebExtractionResult {
   };
   extractionTime: number;
   error?: string;
+  /** Server evidence that extraction returned before any paid provider call. */
+  noBillableWork?: boolean;
+  /** A later fallback cannot prove what happened to an earlier provider call. */
+  providerOutcomeUncertain?: boolean;
 }
 
 export class WebExtractionService {
@@ -86,6 +90,7 @@ export class WebExtractionService {
             success: false,
             url,
             source: "fetch" as const,
+            noBillableWork: true,
             data: { title: "", description: "", content: "" },
             extractionTime: Date.now() - startTime,
             error: `HTTP ${response.status}: ${response.statusText}`,
@@ -130,12 +135,14 @@ export class WebExtractionService {
           url,
           source: "fetch",
           data: { title: "", description: "", content: "" },
+          noBillableWork: true,
           extractionTime: Date.now() - startTime,
           error: fetchMsg,
         };
       }
 
       // 2. Try Browserbase Fetch with proxies (no JS rendering, but bypasses blocks)
+      let providerOutcomeUncertain = false;
       try {
         console.log(`[WebExtract] Trying Browserbase Fetch: ${url}`);
         const bbFetchResult = await this.extractViaBrowserbaseFetch(
@@ -164,6 +171,7 @@ export class WebExtractionService {
           `[WebExtract] Browserbase Fetch also thin (${bbFetchResult.content.length} chars), trying browser session`,
         );
       } catch (bbFetchError) {
+        providerOutcomeUncertain = true;
         const bbFetchMsg =
           bbFetchError instanceof Error
             ? bbFetchError.message
@@ -211,6 +219,7 @@ export class WebExtractionService {
             success: true,
             url,
             source: "browserbase-browser",
+            providerOutcomeUncertain,
             data: parsed,
             extractionTime: Date.now() - startTime,
           };
