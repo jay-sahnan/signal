@@ -1,3 +1,6 @@
+import { isHostedMode } from "@/lib/auth/workspace";
+import { executePaidAction } from "@/lib/billing/paid-action";
+import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { NextResponse } from "next/server";
 
 import { composeEmail } from "@/lib/email-composition/compose";
@@ -34,12 +37,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "draftId is required" }, { status: 400 });
   }
 
-  const supabase = getAdminClient();
+  const hosted = isHostedMode();
+  const supabase = hosted ? ctx.supabase : getAdminClient();
 
   const { data: draft, error: draftErr } = await supabase
     .from("email_drafts")
     .select(
-      "id, user_id, campaign_id, person_id, sequence_id, sequence_step_id, enrollment_id, ai_reasoning, review_status, status",
+      "id, user_id, campaign_id, person_id, sequence_id, sequence_step_id, enrollment_id, ai_reasoning, review_status, status, updated_at",
     )
     .eq("id", body.draftId)
     .single();
@@ -52,20 +56,48 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (draft.status !== "draft") {
-    return NextResponse.json(
-      { error: `Cannot regenerate a ${draft.status} email` },
-      { status: 409 },
-    );
-  }
+  const prepare = async () => {
+    if (draft.status !== "draft" || draft.review_status !== "pending")
+      throw new CreditExecutionError("Only pending drafts can be regenerated", 409);
+  };
+  let enteredWork = false;
+  const work = async () => {
+    enteredWork = true;
+    return regenerateDraft(supabase, user, draft);
+  };
 
-  if (draft.review_status !== "pending") {
-    return NextResponse.json(
-      { error: `Cannot regenerate a ${draft.review_status} email` },
-      { status: 409 },
-    );
+  try {
+    const result = hosted
+      ? await executePaidAction({ identity: { userId: user.id, source: "web" },
+          key: request.headers.get("Idempotency-Key"), kind: "outreach.regenerate",
+          request: { draftId: draft.id } }, work, prepare)
+      : await (async () => { await prepare(); return work(); })();
+    return NextResponse.json(result);
+  } catch (error) {
+    const status = error instanceof CreditExecutionError ? error.status : 500;
+    const message = hosted && enteredWork
+      ? "Regeneration outcome is uncertain. Credits remain reserved; contact support to reconcile this request."
+      : error instanceof Error ? error.message : "Regeneration failed";
+    return NextResponse.json({ error: message }, { status });
   }
+}
 
+type RegenerationDraft = {
+  id: string;
+  person_id: string;
+  campaign_id: string;
+  sequence_id: string | null;
+  sequence_step_id: string | null;
+  enrollment_id: string | null;
+  ai_reasoning: string | null;
+  updated_at: string;
+};
+
+async function regenerateDraft(
+  supabase: NonNullable<Awaited<ReturnType<typeof getSupabaseAndUser>>>["supabase"],
+  user: { id: string },
+  draft: RegenerationDraft,
+) {
   const { data: person } = await supabase
     .from("people")
     .select(
@@ -75,7 +107,7 @@ export async function POST(request: Request) {
     .single();
 
   if (!person) {
-    return NextResponse.json({ error: "Person not found" }, { status: 404 });
+    throw new CreditExecutionError("Person not found", 404);
   }
 
   const { data: campaign } = await supabase
@@ -218,14 +250,11 @@ export async function POST(request: Request) {
   });
 
   if (!composed.ok) {
-    return NextResponse.json(
-      { error: composed.error || "Failed to regenerate email" },
-      { status: 500 },
-    );
+    throw new Error(composed.error || "Failed to regenerate email");
   }
 
   const now = new Date().toISOString();
-  const { error: updateErr } = await supabase
+  const { data: updated, error: updateErr } = await supabase
     .from("email_drafts")
     .update({
       subject: composed.email.subject,
@@ -234,18 +263,23 @@ export async function POST(request: Request) {
       ai_reasoning: composed.email.aiReasoning ?? draft.ai_reasoning,
       updated_at: now,
     })
-    .eq("id", draft.id);
+    .eq("id", draft.id)
+    .eq("user_id", user.id)
+    .eq("status", "draft")
+    .eq("review_status", "pending")
+    .eq("updated_at", draft.updated_at)
+    .select("id")
+    .maybeSingle();
 
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
-  }
+  if (updateErr || !updated)
+    throw new Error("Draft changed or could not be saved; review its current content");
 
-  return NextResponse.json({
+  return {
     ok: true,
     draftId: draft.id,
     subject: composed.email.subject,
     bodyHtml: composed.email.bodyHtml,
     bodyText: composed.email.bodyText ?? null,
     aiReasoning: composed.email.aiReasoning ?? null,
-  });
+  };
 }
