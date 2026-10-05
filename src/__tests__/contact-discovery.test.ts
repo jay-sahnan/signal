@@ -176,6 +176,8 @@ describe("domain gate", () => {
     const result = await run();
 
     expect(result.error).toContain("no domain");
+    expect(result.noBillableWork).toBe(true);
+    expect(domainPeople).not.toHaveBeenCalled();
     expect(result.contacts).toHaveLength(0);
     expect(created).toHaveLength(0);
   });
@@ -801,4 +803,11 @@ describe("team-page linking", () => {
     expect(result.teamPageUnlinked).toBe(0);
     expect(result.contacts).toHaveLength(3);
   });
+});
+
+it("records failure when the domain provider is the only requested source", async () => {
+  domainPeople.mockRejectedValueOnce(new Error("Domain provider unavailable"));
+  const result = await findContactsForOrganization(client(), { organizationId: "org-1", titles: [] });
+  expect(result.sourcesSucceeded).toBe(0);
+  expect(result.noBillableWork).not.toBe(true);
 });
