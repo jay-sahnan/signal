@@ -68,9 +68,11 @@ export function CampaignSignalsPopover({
   const [data, setData] = useState<SignalsData | null>(null);
   const currentCampaign = useRef(campaignId);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (savedLink?: { signal_id: string; enabled: boolean }) => {
     const result = await fetchSignalsData(campaignId);
-    if (currentCampaign.current === campaignId) setData(result);
+    if (currentCampaign.current === campaignId) setData(prev => savedLink && prev
+      ? { ...result, enabled: { ...prev.enabled, [savedLink.signal_id]: savedLink.enabled } }
+      : result);
   }, [campaignId]);
 
   useEffect(() => {
@@ -107,9 +109,10 @@ export function CampaignSignalsPopover({
             }
           : prev,
       );
-    } else if (link?.signal_id !== signalId) {
-      await load();
-      toast.success("Community signal copied to your workspace");
+    } else if (link && link.signal_id !== signalId) {
+      await load(link);
+      if (currentCampaign.current === campaignId)
+        toast.success("Community signal copied to your workspace");
     }
   };
 
