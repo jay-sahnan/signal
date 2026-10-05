@@ -1,3 +1,6 @@
+import { isHostedMode } from "@/lib/auth/workspace";
+import { executePaidAction } from "@/lib/billing/paid-action";
+import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 import { isRecentlyEnriched } from "@/lib/services/knowledge-base";
 import {
@@ -65,6 +68,20 @@ async function callerHoldsPerson(
 }
 
 export async function POST(request: Request) {
+  try {
+    return await enrichRequest(request);
+  } catch (error) {
+    if (error instanceof CreditExecutionError)
+      return Response.json({ error: error.message }, { status: error.status });
+    console.error("[enrich] Request failed", error);
+    return Response.json(
+      { error: "Enrichment failed. Retry the same request." },
+      { status: 500 },
+    );
+  }
+}
+
+async function enrichRequest(request: Request) {
   const ctx = await getSupabaseAndUser();
   if (!ctx) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -78,8 +95,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { contactId } = body as { contactId: string };
-  if (!contactId) {
+  const contactId = body?.contactId;
+  if (typeof contactId !== "string" || !contactId.trim()) {
     return Response.json({ error: "contactId is required" }, { status: 400 });
   }
 
@@ -129,13 +146,19 @@ export async function POST(request: Request) {
   const person = personData as unknown as PersonForEnrichment;
 
   // Check recency
-  const recent = await isRecentlyEnriched("people", personId);
+  const recent = await isRecentlyEnriched(
+    "people",
+    personId,
+    7,
+    isHostedMode(),
+  );
   if (recent) {
-    const { data: p } = await supabase
+    const { data: p, error: cachedError } = await supabase
       .from("people")
       .select("enrichment_data")
       .eq("id", personId)
       .single();
+    if (cachedError) throw new Error("Could not read cached enrichment");
     return Response.json({
       contactId: personId,
       status: "enriched",
@@ -144,7 +167,31 @@ export async function POST(request: Request) {
     });
   }
 
-  const result = await enrichPerson(supabase, personId, person, user.id);
+  const hosted = isHostedMode();
+  if (
+    hosted &&
+    (!person.name || person.name === "Unknown") &&
+    !person.linkedin_url &&
+    !person.twitter_url
+  )
+    throw new CreditExecutionError("No enrichment sources available", 400);
+  const work = async () => {
+    const result = await enrichPerson(supabase, personId, person, user.id);
+    if (hosted && result.status === "failed")
+      throw new Error("All enrichment sources failed");
+    return result;
+  };
+  const result = hosted
+    ? await executePaidAction(
+        {
+          identity: { userId: user.id, source: "web" },
+          key: request.headers.get("Idempotency-Key"),
+          kind: "contact.enrich.web",
+          request: { personId },
+        },
+        work,
+      )
+    : await work();
 
   return Response.json({
     contactId: personId,
