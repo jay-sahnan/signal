@@ -70,3 +70,19 @@ it("can explicitly waive an unresolved charge without claiming no provider work 
   const [, options] = request.mock.calls.find(([url]) => url.includes("/rpc/"))!;
   expect(JSON.parse(options.body)).toMatchObject({ p_charged: 0, p_evidence: "waived: support/approved-cost-waiver" });
 });
+it("lists every hold using a stable next-page cursor", async () => {
+  const operations = Array.from({ length: 101 }, (_, i) => ({ id: `11111111-1111-4111-8111-${String(i + 1).padStart(12, "0")}` }));
+  request.mockResolvedValueOnce(Response.json(operations)).mockResolvedValueOnce(Response.json([operations[100]]));
+  await runCreditRecovery(["list"], deps);
+  const first = JSON.parse(print.mock.calls[0][0]);
+  expect(first.operations).toHaveLength(100);
+  expect(first.nextAfter).toBe(operations[99].id);
+  await runCreditRecovery(["list", first.nextAfter], deps);
+  expect(request.mock.calls[1][0]).toContain(`id=gt.${first.nextAfter}`);
+  expect(JSON.parse(print.mock.calls[1][0])).toMatchObject({ operations: [operations[100]], nextAfter: null });
+});
+it("does not tell operators to repeat a decision after ordinary completion", async () => {
+  request.mockImplementation(async (url: string) => Response.json(url.includes("credit_operation_reconciliations") ? [] : [{ id, execution_attempt: attempt, state: "succeeded", credits: 5 }]));
+  await expect(runCreditRecovery(["apply", "decision.json"], deps)).rejects.toThrow("completed outside operator recovery");
+  expect(request.mock.calls.some(([url]) => url.includes("/rpc/"))).toBe(false);
+});

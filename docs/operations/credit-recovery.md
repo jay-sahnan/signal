@@ -4,7 +4,10 @@ Use a secured operator environment with `SUPABASE_URL` and
 `SUPABASE_SERVICE_ROLE_KEY`. Never put the key in command arguments or logs.
 Do not expose this CLI or its service-role RPC to customers.
 
-1. Run `node scripts/reconcile-credit-operations.mjs list` (oldest 100 holds).
+1. Run `node scripts/reconcile-credit-operations.mjs list` (up to 100 holds).
+   Continue with `list NEXT_AFTER_UUID` using `nextAfter` until it is null.
+   Pages use stable operation-ID ordering, so settling earlier rows does not shift
+   later pages. Restart the scan to include holds created during investigation.
 2. Run `node scripts/reconcile-credit-operations.mjs inspect OPERATION_UUID`.
    Record its execution attempt, frozen credit quote, provider usage and audit.
    Truncated usage requires checking the remaining telemetry directly.
