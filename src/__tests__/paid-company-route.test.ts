@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
   provider: vi.fn(),
+  reviews: vi.fn(),
   discovery: vi.fn(),
   action: vi.fn(),
   recent: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock("@/lib/services/web-extraction-service", () => ({
 }));
 vi.mock("@/lib/services/google-places-service", () => ({
   GooglePlacesService: class {
-    getPlaceReviews = h.provider;
+    getPlaceReviews = h.reviews;
   },
 }));
 vi.mock("@/lib/services/hiring-scraper", () => ({
@@ -79,6 +80,7 @@ const call = (body: unknown = { companyId: "link" }) =>
 beforeEach(() => {
   vi.resetAllMocks();
   h.hosted = true;
+  h.reviews.mockRejectedValue(new Error("Reviews offline"));
   h.recent.mockResolvedValue(false);
   h.paid.mockResolvedValue({ companyId: "org", contactsFound: 2 });
   h.action.mockImplementation(async () =>
@@ -163,4 +165,16 @@ it("rejects blank campaign context before reserving a cached discovery run", asy
   h.recent.mockResolvedValue(true);
   expect((await call({ companyId: "link", campaignId: "" })).status).toBe(400);
   expect(h.paid).not.toHaveBeenCalled();
+});
+
+it("does not count a reviews miss as successful research when every other source fails", async () => {
+  h.provider.mockRejectedValue(new Error("Provider offline"));
+  h.reviews.mockResolvedValue({ found: false });
+  h.action.mockImplementation(async (_label, work) => work());
+  h.paid.mockImplementation(async (_request, work) => {
+    await expect(work()).rejects.toThrow("All company research sources failed");
+    throw new CreditExecutionError("Uncertain operation", 409);
+  });
+  expect((await call()).status).toBe(409);
+  expect(h.discovery).not.toHaveBeenCalled();
 });

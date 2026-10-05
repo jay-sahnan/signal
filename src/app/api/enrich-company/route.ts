@@ -533,7 +533,7 @@ async function enrichOrganization(
         isHostedMode() &&
         !searches.length &&
         !enrichmentData.website &&
-        !(runGoogleReviews && googleReviewsResult.status === "fulfilled") &&
+        !enrichmentData.googleReviews &&
         !careers
       )
         throw new Error("All company research sources failed");
