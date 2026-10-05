@@ -471,3 +471,17 @@ describe("<CompaniesList> review actions", () => {
     );
   });
 });
+it("includes stale successful contacts but excludes fresh ones from the enrichment batch", async () => {
+  sessionStorage.clear();
+  vi.mocked(apiFetch).mockResolvedValue({ ok: true, json: async () => ({ enriched: 1 }) } as Response);
+  renderList([
+    contact({ id: "fresh", person_id: "fresh", last_enriched_at: new Date().toISOString() }),
+    contact({ id: "stale", person_id: "stale", last_enriched_at: new Date(Date.now() - 8 * 86400000).toISOString() }),
+  ]);
+  fireEvent.click(screen.getByRole("button", { name: /Enrich all/ }));
+  expect(screen.getByText("Enrich 1 contact?")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Enrich 1" }));
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/enrich/bulk", expect.any(Object)));
+  const init = vi.mocked(apiFetch).mock.calls.find(([url]) => url === "/api/enrich/bulk")![1];
+  expect(JSON.parse(init!.body as string).personIds).toEqual(["stale"]);
+});

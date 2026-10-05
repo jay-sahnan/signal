@@ -189,6 +189,7 @@ export default function CampaignDetailPage() {
             (person.affiliation_evidence as string | null) ?? null,
           linkedin_url: person.linkedin_url as string | null,
           twitter_url: person.twitter_url as string | null,
+          last_enriched_at: (person.last_enriched_at as string | null) ?? null,
           enrichment_status:
             person.enrichment_status as CampaignContact["enrichment_status"],
           enrichment_data: (person.enrichment_data ||

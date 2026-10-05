@@ -547,6 +547,13 @@ export function CompaniesList({
               const isExpanded = expandedCompanyIds.has(company.id);
               const companyContacts =
                 contactsByOrgId.get(company.organization_id) ?? [];
+              const refreshBefore = Date.now() - 7 * 24 * 60 * 60 * 1000;
+              const pendingEnrichment = companyContacts.filter((contact) => {
+                if (contact.enrichment_status !== "enriched") return true;
+                const stamp = contact.enrichment_data?.enrichedAt ?? contact.last_enriched_at;
+                const at = stamp ? new Date(stamp).getTime() : NaN;
+                return !Number.isFinite(at) || at <= refreshBefore;
+              });
               let enrichedCount = 0;
               let missingEmailCount = 0;
               let scoredCount = 0;
@@ -673,16 +680,12 @@ export function CompaniesList({
                       )}
                       {company.organization_id && (
                         <EnrichAllButton
-                          personIds={companyContacts
-                            .filter((c) => c.enrichment_status !== "enriched")
-                            .map((c) => c.person_id)}
+                          personIds={pendingEnrichment.map((c) => c.person_id)}
                           campaignId={campaignId}
                           organizationId={company.organization_id}
                           // Only what is actually left to do, so the number on
                           // the button matches what the confirm will charge for.
-                          unenrichedCount={
-                            companyContacts.length - enrichedCount
-                          }
+                          unenrichedCount={pendingEnrichment.length}
                           onDone={onDataChanged}
                         />
                       )}
