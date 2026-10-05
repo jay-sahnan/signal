@@ -365,6 +365,7 @@ export const fetchGitHubStargazers = tool({
         .from("signals")
         .select("id")
         .eq("slug", "github-stargazers")
+        .eq("is_builtin", true)
         .maybeSingle();
 
       if (signalError) {
