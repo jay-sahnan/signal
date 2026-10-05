@@ -4,6 +4,8 @@ const h = vi.hoisted(() => ({
   resolve: vi.fn(),
   execute: vi.fn(),
   quote: vi.fn(),
+  lookup: vi.fn(),
+  filters: [] as Array<[string, unknown]>,
 }));
 vi.mock("@/lib/auth/workspace", () => ({
   isHostedMode: () => h.hosted,
@@ -14,8 +16,21 @@ vi.mock("@/lib/billing/credit-execution", async (original) => ({
   ...(await original<object>()),
   executeWithCredits: h.execute,
 }));
+vi.mock("@/lib/supabase/admin", () => ({
+  getAdminClient: () => ({
+    from: (table: string) => {
+      expect(table).toBe("credit_operations");
+      const q = {
+        select: (columns: string) => { expect(columns).toBe("id"); return q; },
+        eq: (column: string, value: unknown) => { h.filters.push([column, value]); return q; },
+        maybeSingle: h.lookup,
+      };
+      return q;
+    },
+  }),
+}));
 import { runWithIdentity } from "@/lib/auth/identity";
-import { executePaidAction } from "@/lib/billing/paid-action";
+import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 const input = {
   identity: { userId: "user", source: "web" as const },
   key: "a1111111-1111-4111-8111-111111111111",
@@ -25,6 +40,8 @@ const input = {
 beforeEach(() => {
   vi.clearAllMocks();
   h.hosted = true;
+  h.filters = [];
+  h.lookup.mockResolvedValue({ data: null, error: null });
   h.resolve.mockResolvedValue("workspace");
   h.quote.mockReturnValue({ credits: 3, rateVersion: "v1" });
   h.execute.mockImplementation(async (_input, work) => work());
@@ -109,4 +126,38 @@ it("lets the ledger recover an existing quote when current rates are removed", a
     expect.objectContaining({ credits: null, rateVersion: null }),
     expect.any(Function),
   );
+});
+
+it("looks up the same scoped key as execution without quoting or running work", async () => {
+  await executePaidAction(input, async () => null);
+  const executionKey = h.execute.mock.calls[0][0].key;
+  h.quote.mockClear();
+  h.execute.mockClear();
+  h.lookup.mockResolvedValue({ data: { id: "existing" }, error: null });
+  expect(await hasPaidAction({ ...input, key: input.key.toUpperCase() })).toBe(true);
+  expect(h.filters).toEqual([
+    ["workspace_id", "workspace"], ["user_id", "user"],
+    ["kind", "profile.research"], ["source", "web"],
+    ["operation_key", executionKey],
+  ]);
+  expect(h.quote).not.toHaveBeenCalled();
+  expect(h.execute).not.toHaveBeenCalled();
+});
+it("distinguishes a missing operation from an unavailable ledger", async () => {
+  expect(await hasPaidAction(input)).toBe(false);
+  h.lookup.mockResolvedValue({ data: null, error: { message: "offline" } });
+  await expect(hasPaidAction(input)).rejects.toMatchObject({ status: 503 });
+});
+it("rejects foreign workspace context before reading operation existence", async () => {
+  await expect(hasPaidAction({
+    ...input, identity: { ...input.identity, workspaceId: "foreign" },
+  })).rejects.toMatchObject({ status: 403 });
+  expect(h.lookup).not.toHaveBeenCalled();
+});
+it("does not look up self-hosted or keyless free cache reads", async () => {
+  expect(await hasPaidAction({ ...input, key: null })).toBe(false);
+  h.hosted = false;
+  expect(await hasPaidAction(input)).toBe(false);
+  expect(h.resolve).not.toHaveBeenCalled();
+  expect(h.lookup).not.toHaveBeenCalled();
 });
