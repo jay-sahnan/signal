@@ -38,3 +38,9 @@ investigate the original invocation and provider outcome. Do not mark a live
 execution uncertain or treat a resolved hold as proof other holds can be freed.
 This tool is a manual recovery path, not an automatic refund policy or launch
 approval. Hosted mode stays disabled until all rollout checks pass.
+
+Oversized original outcomes are retained exactly in a separate private recovery
+store, using PostgreSQL text storage. The normal execution limit stays at 1 MB.
+Check database capacity before recovering a large result; do not truncate it or
+replace successful work with a fabricated smaller response. Existing-key replay
+reads the original recovered payload under the same owner authorization.
