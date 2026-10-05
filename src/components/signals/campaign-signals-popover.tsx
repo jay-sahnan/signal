@@ -66,23 +66,30 @@ export function CampaignSignalsPopover({
 }: CampaignSignalsPopoverProps) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<SignalsData | null>(null);
+  const [toggling, setToggling] = useState(false);
+  const togglePending = useRef(false);
+  const readRevision = useRef(0);
   const currentCampaign = useRef(campaignId);
 
   const load = useCallback(async (savedLink?: { signal_id: string; enabled: boolean }) => {
+    if (togglePending.current && !savedLink) return;
+    const revision = ++readRevision.current;
     const result = await fetchSignalsData(campaignId);
-    if (currentCampaign.current === campaignId) setData(prev => savedLink && prev
+    if (currentCampaign.current === campaignId && revision === readRevision.current) setData(prev => savedLink && prev
       ? { ...result, enabled: { ...prev.enabled, [savedLink.signal_id]: savedLink.enabled } }
       : result);
   }, [campaignId]);
 
   useEffect(() => {
     currentCampaign.current = campaignId;
+    const revision = ++readRevision.current;
     let cancelled = false;
     fetchSignalsData(campaignId).then((result) => {
-      if (!cancelled) setData(result);
+      if (!cancelled && revision === readRevision.current) setData(result);
     });
     return () => {
       cancelled = true;
+      readRevision.current++;
     };
   }, [campaignId]);
 
@@ -91,28 +98,37 @@ export function CampaignSignalsPopover({
   const enabledCount = signals.filter((s) => enabledMap[s.id]).length;
 
   const handleToggle = async (signalId: string, enabled: boolean) => {
-    setData((prev) =>
-      prev
-        ? { ...prev, enabled: { ...prev.enabled, [signalId]: enabled } }
-        : prev,
-    );
-    const supabase = createClient();
-    const { data: link, error } = await setCampaignSignal(supabase, campaignId, signalId, enabled);
-    if (currentCampaign.current !== campaignId) return;
-    if (error) {
-      toast.error("Failed to toggle signal");
+    if (togglePending.current) return;
+    togglePending.current = true;
+    readRevision.current++;
+    setToggling(true);
+    try {
       setData((prev) =>
         prev
-          ? {
-              ...prev,
-              enabled: { ...prev.enabled, [signalId]: !enabled },
-            }
+          ? { ...prev, enabled: { ...prev.enabled, [signalId]: enabled } }
           : prev,
       );
-    } else if (link && link.signal_id !== signalId) {
-      await load(link);
-      if (currentCampaign.current === campaignId)
-        toast.success("Community signal copied to your workspace");
+      const supabase = createClient();
+      const { data: link, error } = await setCampaignSignal(supabase, campaignId, signalId, enabled);
+      if (currentCampaign.current !== campaignId) return;
+      if (error) {
+        toast.error("Failed to toggle signal");
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                enabled: { ...prev.enabled, [signalId]: !enabled },
+              }
+            : prev,
+        );
+      } else if (link && link.signal_id !== signalId) {
+        await load(link);
+        if (currentCampaign.current === campaignId)
+          toast.success("Community signal copied to your workspace");
+      }
+    } finally {
+      togglePending.current = false;
+      setToggling(false);
     }
   };
 
@@ -176,6 +192,7 @@ export function CampaignSignalsPopover({
                     <span className="truncate text-sm">{signal.name}</span>
                   </div>
                   <Switch
+                    disabled={toggling}
                     checked={enabledMap[signal.id] ?? false}
                     onCheckedChange={(checked) =>
                       handleToggle(signal.id, checked)
