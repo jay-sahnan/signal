@@ -1,3 +1,4 @@
+import { paidContactDiscovery } from "@/lib/billing/contact-discovery";
 import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
 import { toolOperationKey } from "@/lib/billing/tool-operation-key";
 import { getCurrentIdentity } from "@/lib/auth/identity";
@@ -2058,8 +2059,9 @@ export const setCompanyWebsite = tool({
 
 export const findContacts = tool({
   description:
-    "Find contacts at a specific company by searching for target titles on LinkedIn. When campaignId is provided, uses the campaign's ICP target titles and links contacts to the campaign. When used without a campaign, requires explicit titles. Pass either companyId (campaign-organization link) or organizationId (direct).",
+    "Find contacts at a specific company by searching for target titles on LinkedIn. When campaignId is provided, uses the campaign's ICP target titles and links contacts to the campaign. When used without a campaign, requires explicit titles. Hosted discovery uses a flat credit charge per company, including useful partial results; pre-provider refusals cost zero. Reuse operationId when retrying. Pass either companyId (campaign-organization link) or organizationId (direct).",
   inputSchema: z.object({
+    operationId: z.string().uuid().optional().describe("Required for hosted MCP: a stable UUID reused for retries of this request."),
     companyId: z
       .string()
       .uuid()
@@ -2101,7 +2103,7 @@ export const findContacts = tool({
         "Who from the company's own team page joins the campaign. Default 'matching': only people whose title is in the family of a target title (Head of Growth also catches Growth Lead, VP Growth). 'all': link every listed employee, for 'get me everyone at this company'.",
       ),
   }),
-  execute: async (input) => {
+  execute: async (input, opts) => {
     if (!input.companyId && !input.organizationId) {
       throw new Error(
         "Either companyId (campaign-organization link ID) or organizationId (organization ID) is required.",
@@ -2109,25 +2111,23 @@ export const findContacts = tool({
     }
 
     const supabase = await createClient();
+    const hosted = isHostedMode();
+    const session = hosted ? await toolSession() : null;
+    if (hosted && !session) throw new Error("Company not found");
+    const identity = getCurrentIdentity() ?? { userId: session?.userId ?? "", source: "web" as const };
 
     // Resolve target titles from campaign ICP or explicit input
     let targetTitles: string[] = input.titles || [];
-    if (targetTitles.length === 0 && input.campaignId) {
-      const { data: campaign } = await supabase
+    if (input.campaignId && (hosted || targetTitles.length === 0)) {
+      const { data: campaign, error } = await supabase
         .from("campaigns")
-        .select("icp")
+        .select("icp, user_id")
         .eq("id", input.campaignId)
         .single();
+      if (hosted && (error || !campaign || campaign.user_id !== session!.userId))
+        throw new Error("Campaign not found");
       const campaignIcp = campaign?.icp as Record<string, unknown> | null;
-      targetTitles = (campaignIcp?.targetTitles as string[] | undefined) || [];
-    }
-
-    if (targetTitles.length === 0) {
-      return {
-        contacts: [],
-        error:
-          "No target titles provided. Pass titles explicitly or use a campaign with ICP targetTitles set.",
-      };
+      if (targetTitles.length === 0) targetTitles = (campaignIcp?.targetTitles as string[] | undefined) || [];
     }
 
     // Resolve the organization — either via the campaign link or directly.
@@ -2162,18 +2162,45 @@ export const findContacts = tool({
       orgId = input.organizationId!;
     }
 
-    const result = await findContactsForOrganization(supabase, {
+    if (hosted) {
+      if (input.campaignId) {
+        const { data: link, error } = await supabase.from("campaign_organizations")
+          .select("id").eq("organization_id", orgId).eq("campaign_id", input.campaignId).maybeSingle();
+        if (error || !link) throw new Error("Company not found");
+      } else if (!(await callerHoldsOrganization(supabase, session!.userId, orgId))) {
+        throw new Error("Company not found");
+      }
+    }
+    const result = await paidContactDiscovery({
+      identity,
+      key: toolOperationKey(identity.source, input.operationId, opts?.toolCallId),
+      request: {
+        organizationId: orgId, campaignId: input.campaignId ?? null,
+        titles: input.titles?.slice(0, 5) ?? null,
+        numResults: input.numResults, linkTeamPage: input.includeTeamPage ?? "matching",
+      },
+    }, async () => {
+      if (targetTitles.length === 0) return {
+        noBillableWork: true as const, sourcesSucceeded: 0, organizationId: orgId,
+        companyName: "", contacts: [], alreadyLinked: [], alreadyLinkedTotal: 0,
+        searchesRun: [], totalFound: 0, duplicatesSkipped: 0, verifiedCount: 0,
+        uncertainCount: 0, rejectedAsWrongCompany: 0, departedCount: 0,
+        affiliationUnchanged: 0, teamPageUnlinked: 0, targetTitles: [],
+        error: "No target titles provided. Pass titles explicitly or use a campaign with ICP targetTitles set.",
+      };
+      return { ...await findContactsForOrganization(supabase, {
       organizationId: orgId,
       campaignId: input.campaignId ?? null,
       titles: targetTitles,
       numResults: input.numResults,
       linkTeamPage: input.includeTeamPage ?? "matching",
+    }), targetTitles: targetTitles.slice(0, 5) };
     });
 
     return {
       companyId: input.companyId,
       companyName: result.companyName,
-      targetTitles,
+      targetTitles: result.targetTitles,
       contacts: result.contacts,
       alreadyLinked: result.alreadyLinked,
       alreadyLinkedTotal: result.alreadyLinkedTotal,
