@@ -170,6 +170,14 @@ it("persists source revision through real credit settlement and catches company-
 it("warns before presenting revisionless saved research in a chat turn", async () => {
   h.paid.mockResolvedValue({ ok: true, added: 2 });
   await withWebBillingTurn("turn", async () => {
-    expect(await execute({ profileId: h.profile.id }, "web")).toMatchObject({ error: expect.stringContaining("new message") });
+    expect(await execute({ profileId: h.profile.id }, "web")).toMatchObject({ ok: true, added: 2, warning: expect.stringContaining("saved research") });
   });
+});
+
+it("returns legacy saved research without requiring another paid operation", async () => {
+  h.paid.mockResolvedValue({ ok: true, added: 2, sourceRevision: requestHash({ urls: [null, null, "https://example.com", null], name: null }) });
+  await withWebBillingTurn("turn", async () => {
+    expect(await execute({ profileId: h.profile.id }, "web")).toMatchObject({ ok: true, added: 2, warning: expect.stringContaining("saved research") });
+  });
+  expect(h.research).not.toHaveBeenCalled();
 });
