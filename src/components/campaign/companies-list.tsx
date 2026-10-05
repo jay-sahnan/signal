@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { requestBulkEmailLookup } from "@/lib/billing/bulk-email-request";
+import { requestContactEnrichment } from "@/lib/billing/contact-enrichment-request";
 import { requestEmailLookup } from "@/lib/billing/email-lookup-request";
 import { AFFILIATION_SEND_THRESHOLD } from "@/lib/affiliation-threshold";
 import Image from "next/image";
@@ -169,24 +170,15 @@ export function CompaniesList({
     });
   };
 
-  const enrichContact = async (contactId: string) => {
+  const enrichContact = async (
+    contactId: string,
+    newAttempt = false,
+  ): Promise<void> => {
     setEnrichingIds((prev) => new Set(prev).add(contactId));
     try {
-      // apiFetch does not throw on a non-2xx, so without this a 403, a 429 or
-      // a 500 was indistinguishable from success: the spinner ran, the spinner
-      // stopped, nothing changed, and the user clicked again and paid again.
-      const res = await apiFetch("/api/enrich", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactId }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        toast.error(body?.error ?? "Could not enrich this contact.");
-        return;
-      }
+      const personId =
+        contacts.find((c) => c.id === contactId)?.person_id ?? contactId;
+      await requestContactEnrichment(userId, personId, newAttempt);
       // Deliberately does NOT expand the row. Enriching is something you do to
       // a list, often several in a row, and force-opening each one shoves
       // everything below it down the page mid-scan. The data updates in place;
@@ -194,6 +186,14 @@ export function CompaniesList({
       onDataChanged();
     } catch (err) {
       console.error(`[enrich] Failed:`, err);
+      toast.error(err instanceof Error ? err.message : "Enrichment failed", {
+        description:
+          "Retry keeps the same request. New enrichment can use additional credits; previous work may still be reserved.",
+        action: {
+          label: "New enrichment",
+          onClick: () => void enrichContact(contactId, true),
+        },
+      });
     } finally {
       setEnrichingIds((prev) => {
         const next = new Set(prev);

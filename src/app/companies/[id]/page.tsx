@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { toast } from "sonner";
+import { requestContactEnrichment } from "@/lib/billing/contact-enrichment-request";
 import { useParams } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 
@@ -65,6 +68,7 @@ interface CampaignPersonRow {
 }
 
 export default function CompanyPage() {
+  const { userId } = useAuth();
   const params = useParams<{ id: string }>();
   const companyId = params.id;
 
@@ -189,19 +193,26 @@ export default function CompanyPage() {
   );
 
   const enrichContact = useCallback(
-    async (personId: string) => {
+    async function retryEnrichment(
+      personId: string,
+      newAttempt = false,
+    ): Promise<void> {
       try {
-        await apiFetch("/api/enrich", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactId: personId }),
-        });
+        await requestContactEnrichment(userId, personId, newAttempt);
         await fetchCore();
       } catch (err) {
         console.error("[enrich] Failed:", err);
+        toast.error(err instanceof Error ? err.message : "Enrichment failed", {
+          description:
+            "Retry keeps the same request. New enrichment can use additional credits; previous work may still be reserved.",
+          action: {
+            label: "New enrichment",
+            onClick: () => void retryEnrichment(personId, true),
+          },
+        });
       }
     },
-    [fetchCore],
+    [fetchCore, userId],
   );
 
   const selectedContact: CampaignContact | null = useMemo(() => {
