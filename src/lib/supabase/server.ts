@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { createServerClient } from "@supabase/ssr";
 
+import { isHostedMode, resolveWorkspace } from "@/lib/auth/workspace";
 import { getCurrentIdentity } from "@/lib/auth/identity";
 import { signSupabaseJwt } from "@/lib/auth/supabase-jwt";
 import { withTimeout } from "@/lib/utils/timeout";
@@ -227,14 +228,19 @@ function isReplayable(
 export const createClient = async () => {
   warnIfKeyless();
   const injected = getCurrentIdentity();
+  const session = injected ? null : await auth();
+  if (isHostedMode()) {
+    const userId = injected?.userId ?? session?.userId;
+    if (!userId) throw new Error("Workspace identity required");
+    const workspaceId = await resolveWorkspace(userId);
+    if (injected?.workspaceId && injected.workspaceId !== workspaceId)
+      throw new Error("Workspace context mismatch");
+  }
   const freshToken = injected
     ? // Session-less caller: the app signs its own token. The provider still
       // handles expiry so a long MCP tool call re-signs mid-flight.
       createTokenProvider(() => signSupabaseJwt(injected.userId), null)
-    : await (async () => {
-        const { getToken, sessionId } = await auth();
-        return createTokenProvider(getToken, sessionId);
-      })();
+    : createTokenProvider(session!.getToken, session!.sessionId);
 
   return createServerClient(supabaseUrl!, supabaseKey!, {
     // @supabase/ssr requires a cookies adapter even though Clerk-issued JWTs
