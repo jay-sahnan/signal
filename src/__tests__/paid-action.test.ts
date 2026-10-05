@@ -59,6 +59,7 @@ it("resolves the verified user's workspace and quotes before executing", async (
       request: { input: input.request, units: 1 },
     }),
     work,
+    undefined,
   );
 });
 it("keeps retries stable while separating callers and actions", async () => {
@@ -126,6 +127,7 @@ it("lets the ledger recover an existing quote when current rates are removed", a
   expect(h.execute).toHaveBeenCalledWith(
     expect.objectContaining({ credits: null, rateVersion: null }),
     expect.any(Function),
+    undefined,
   );
 });
 
@@ -190,4 +192,10 @@ it("does not replace explicit MCP keys inside a web turn context", async () => {
   await executePaidAction(mcp, async () => null);
   await withWebBillingTurn("turn", () => executePaidAction(mcp, async () => null));
   expect(h.execute.mock.calls[0][0].key).toBe(h.execute.mock.calls[1][0].key);
+});
+
+it("forwards read-only preparation to the credit executor", async () => {
+  const prepare = vi.fn();
+  await executePaidAction(input, async () => null, prepare);
+  expect(h.execute.mock.calls[0][2]).toBe(prepare);
 });

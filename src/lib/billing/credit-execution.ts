@@ -51,8 +51,11 @@ type CreditExecution = {
 export async function executeWithCredits<T>(
   input: CreditExecution,
   work: () => Promise<T | NoBillableWork<T>>,
+  /** Read-only preflight only: never providers, mutations, or billable work. */
+  prepare?: () => Promise<void>,
 ): Promise<T> {
   if (!isHostedMode()) {
+    await prepare?.();
     const result = await work();
     return result instanceof NoBillableWork ? result.value : result;
   }
@@ -102,6 +105,9 @@ export async function executeWithCredits<T>(
       "Operation already started or closed; check its outcome before retrying",
       409,
     );
+  // Replay above does not need current metadata. A failed read leaves the
+  // reservation unstarted and safely retryable with the same operation key.
+  await prepare?.();
   const attempt = randomUUID();
   let started = false;
   for (let confirmation = 0; confirmation < 2; confirmation++) {

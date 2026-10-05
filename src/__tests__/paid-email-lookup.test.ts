@@ -1,6 +1,9 @@
+import { executeWithCredits } from "@/lib/billing/credit-execution";
+vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: () => ({ rpc: h.rpc }) }));
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  rpc: vi.fn(),
   existing: vi.fn(),
   holds: vi.fn(),
   session: vi.fn(),
@@ -167,7 +170,7 @@ it("checks the original verification action even after an address becomes truste
   h.existing.mockResolvedValue(true);
   await lookup({ revalidate: true });
   expect(h.paid).toHaveBeenCalledWith(
-    expect.objectContaining({ kind: "email.verify" }), expect.any(Function),
+    expect.objectContaining({ kind: "email.verify" }), expect.any(Function), expect.any(Function),
   );
 });
 
@@ -185,11 +188,29 @@ it("replays settled email work without depending on the current company read", a
 it("still researches an unstarted reservation when contact data has become cached", async () => {
   h.existing.mockResolvedValue(true);
   h.person.work_email = "stored@example.com";
-  h.paid.mockImplementation(async (_input, work) => runWithIdentity(
-    { userId: "owner", source: "mcp", operationId: "reserved" }, work,
-  ));
+  h.paid.mockImplementation(async (_input, work, prepare) => {
+    await prepare?.();
+    return runWithIdentity({ userId: "owner", source: "mcp", operationId: "reserved" }, work);
+  });
   h.mx.mockRejectedValue(new Error("provider boundary reached"));
   await expect(lookup()).rejects.toThrow("provider boundary reached");
   expect(h.mx).toHaveBeenCalledWith("example.com");
   expect(h.paid).toHaveBeenCalledTimes(1);
+});
+
+it("leaves an existing reservation retryable when company metadata is unavailable", async () => {
+  h.existing.mockResolvedValue(true);
+  const normal = h.db.from.getMockImplementation()!;
+  h.db.from.mockImplementation((table: string) => {
+    if (table === "organizations") return { select: () => ({ eq: () => ({ single: async () => ({ data: null, error: { message: "unavailable" } }) }) }) };
+    return normal(table);
+  });
+  h.rpc.mockImplementation(async (name) => ({ data: name === "reserve_credit_quote"
+    ? { id: "reserved", state: "reserved", credits: 5 } : true }));
+  h.paid.mockImplementation((input, work, prepare) => executeWithCredits({
+    ...input, identity: { ...input.identity, workspaceId: "workspace" }, credits: 5, rateVersion: "v1",
+  }, work, prepare));
+  await expect(lookup()).rejects.toThrow("Could not load contact company");
+  expect(h.rpc.mock.calls.map(([name]) => name)).toEqual(["reserve_credit_quote"]);
+  expect(h.mx).not.toHaveBeenCalled();
 });
