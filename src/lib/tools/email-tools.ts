@@ -1,3 +1,8 @@
+import { executePaidAction } from "@/lib/billing/paid-action";
+import { toolOperationKey } from "@/lib/billing/tool-operation-key";
+import { CreditExecutionError } from "@/lib/billing/credit-execution";
+import { getCurrentIdentity } from "@/lib/auth/identity";
+import { isHostedMode } from "@/lib/auth/workspace";
 import { tool } from "ai";
 import { z } from "zod";
 import { createClient, getSupabaseAndUser } from "@/lib/supabase/server";
@@ -94,27 +99,43 @@ function pushCandidate(
   candidates.push({ ...candidate, email });
 }
 
+function loadEmailPerson(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  personId: string,
+) {
+  return supabase
+    .from("people")
+    .select(
+      "id, name, title, work_email, personal_email, organization_id, work_email_source, work_email_confidence, work_email_verification, enrichment_data",
+    )
+    .eq("id", personId)
+    .single();
+}
+
+type EmailLookupSnapshot = {
+  person: NonNullable<Awaited<ReturnType<typeof loadEmailPerson>>["data"]>;
+  domain: string | null;
+  orgIsCatchAll: boolean | null;
+};
+
 /**
- * Finds a work email for a person — for free, by default.
- *
- * Discovery and proof are deliberately separated. The free strategies (org
- * pattern, Exa scrape, inference, blind guess) produce a SUGGESTED address,
- * stored as `unchecked` and badged that way in the UI. Proof costs provider
- * credits, so it happens exactly once per address, at the moment it matters:
- * just before a send (services/send-verification, invoked by the send gate) or
- * on an explicit `revalidate`. The paid finder participates only in
- * verification runs, as the best next candidate after a guess is proven dead.
- * Net effect: enrichment can suggest addresses for an entire campaign without
- * spending a credit, and the daily send cap naturally bounds what verification
- * can ever cost.
- *
- * When verification does run (verify/revalidate), strategies only nominate
- * candidates and the verifier decides — proof of delivery outranks provenance,
- * so a pattern guess that verifies beats a scraped address that doesn't.
+ * Returns stored addresses for free. Hosted research uses workspace credits;
+ * provider verification credits are separate and spent only for verify/revalidate.
+ * Discovery stores suggested addresses as unchecked. Verification tests candidates
+ * before send or on explicit revalidation, so delivery proof outranks provenance.
  */
-export async function findEmailForPerson(
+export function findEmailForPerson(
+  personId: string,
+  opts: Parameters<typeof findEmailForPersonImpl>[1] = {},
+) {
+  return findEmailForPersonImpl(personId, opts);
+}
+
+async function findEmailForPersonImpl(
   personId: string,
   opts: {
+    /** Stable operation identity supplied by a verified entry point. */
+    operationKey?: string | null;
     revalidate?: boolean;
     /**
      * Spend provider credits proving candidates. Off by default — discovery
@@ -123,6 +144,7 @@ export async function findEmailForPerson(
      */
     verify?: boolean;
   } = {},
+  snapshot?: EmailLookupSnapshot,
 ): Promise<{
   email: string | null;
   source?: string;
@@ -133,15 +155,30 @@ export async function findEmailForPerson(
 }> {
   const supabase = await createClient();
 
-  const { data: person, error: personErr } = await supabase
-    .from("people")
-    .select(
-      "id, name, title, work_email, personal_email, organization_id, work_email_source, work_email_confidence, work_email_verification, enrichment_data",
+  const billingSession = isHostedMode() ? await toolSession() : null;
+  if (isHostedMode()) {
+    if (!billingSession)
+      throw new CreditExecutionError("Sign in required", 401);
+    if (
+      !(await callerHoldsPerson(
+        billingSession.supabase,
+        billingSession.userId,
+        personId,
+      ))
     )
-    .eq("id", personId)
-    .single();
+      throw new CreditExecutionError("Person not found", 404);
+  }
+
+  const { data: person, error: personErr } = snapshot
+    ? { data: snapshot.person, error: null }
+    : await loadEmailPerson(supabase, personId);
 
   if (personErr || !person) {
+    if (billingSession)
+      throw new CreditExecutionError(
+        "Could not load contact",
+        personErr ? 503 : 404,
+      );
     return { email: null, reason: "Person not found.", personId };
   }
 
@@ -158,7 +195,7 @@ export async function findEmailForPerson(
     person.work_email_source === "user_entered" ||
     person.work_email_source === "send_confirmed";
 
-  if (person.work_email && (alreadyTrusted || !opts.revalidate)) {
+  if (!snapshot && person.work_email && (alreadyTrusted || !opts.revalidate)) {
     return {
       email: person.work_email,
       source: person.work_email_source ?? "existing",
@@ -174,13 +211,13 @@ export async function findEmailForPerson(
   // Same revalidate carve-out as above: without it, a person who happens to
   // have a personal address short-circuits here and their unverified work email
   // is never checked, while the tool reports success.
-  if (person.personal_email && !opts.revalidate) {
+  if (!snapshot && person.personal_email && !opts.revalidate) {
     return { email: person.personal_email, source: "existing", personId };
   }
 
-  let domain: string | null = null;
-  let orgIsCatchAll: boolean | null = null;
-  if (person.organization_id) {
+  let domain = snapshot?.domain ?? null;
+  let orgIsCatchAll = snapshot?.orgIsCatchAll ?? null;
+  if (!snapshot && person.organization_id) {
     const { data: org, error: orgError } = await supabase
       .from("organizations")
       .select("domain, name, is_catch_all")
@@ -192,6 +229,8 @@ export async function findEmailForPerson(
     // is presented as a clean answer for a contact whose org has a perfectly
     // good domain. Fail closed and say it is retryable.
     if (orgError) {
+      if (billingSession)
+        throw new CreditExecutionError("Could not load contact company", 503);
       console.error(
         `[findEmail] company lookup failed for person ${personId}: ${orgError.message}`,
       );
@@ -203,6 +242,29 @@ export async function findEmailForPerson(
     }
     domain = org?.domain ?? null;
     orgIsCatchAll = org?.is_catch_all ?? null;
+  }
+
+  if (billingSession && !getCurrentIdentity()?.operationId) {
+    const identity = getCurrentIdentity() ?? {
+      userId: billingSession.userId,
+      source: "web" as const,
+    };
+    const verify = opts.verify ?? opts.revalidate ?? false;
+    return executePaidAction(
+      {
+        identity,
+        key: opts.operationKey ?? null,
+        kind: verify ? "email.verify" : "email.lookup",
+        request: { personId, revalidate: opts.revalidate ?? false, verify },
+      },
+      // Freeze preflight: no repeated reads or cached-return paths after reservation.
+      () =>
+        findEmailForPersonImpl(personId, opts, {
+          person,
+          domain,
+          orgIsCatchAll,
+        }),
+    );
   }
 
   const { first, last } = splitName(person.name);
@@ -743,8 +805,15 @@ async function inferPatternFromOrg(
 
 export const findEmail = tool({
   description:
-    "Find a contact's email address for free (pattern, web search, team pages) and store it as a suggestion; verification happens automatically when a send is attempted, so this never spends provider credits on its own. Returns the stored address if there is one. Pass revalidate: true only to force a paid re-verification now, e.g. after a send was refused because the address was proven dead.",
+    "Find a contact's email address for free (pattern, web search, team pages) and store it as a suggestion; verification happens automatically when a send is attempted, Hosted research uses workspace lookup credits; reading an existing address does not. Returns the stored address if there is one. Pass revalidate: true only to force a paid re-verification now, e.g. after a send was refused because the address was proven dead.",
   inputSchema: z.object({
+    operationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe(
+        "Hosted MCP: supply a new UUID for new research; reuse it exactly on retries.",
+      ),
     personId: z.string().uuid().describe("Person ID to find email for."),
     revalidate: z
       .boolean()
@@ -753,7 +822,7 @@ export const findEmail = tool({
         "Re-verify an address that is already stored but unverified. Use when the send gate reports the email has never been verified.",
       ),
   }),
-  execute: async ({ personId, revalidate }) => {
+  execute: async ({ personId, revalidate, operationId }, opts) => {
     // /api/find-email wraps this exact function behind an ownership check;
     // reached as a tool it had none, so saying a uuid to the agent returned
     // the stored address for it and, on revalidate, wrote back to the row.
@@ -774,7 +843,14 @@ export const findEmail = tool({
       // confirm which guessed uuids are real contacts.
       return { email: null, reason: "Person not found.", personId };
     }
-    return findEmailForPerson(personId, { revalidate });
+    return findEmailForPerson(personId, {
+      revalidate,
+      operationKey: toolOperationKey(
+        getCurrentIdentity()?.source ?? "web",
+        operationId,
+        opts?.toolCallId,
+      ),
+    });
   },
 });
 
@@ -782,8 +858,15 @@ export const findEmail = tool({
 
 export const findEmails = tool({
   description:
-    "Batch-discover email addresses for multiple contacts. Returns found, not-found and skipped lists. Contacts with a stored address are returned in found with their existing source, not newly discovered. Contacts not confirmed to work at their company are skipped. Discovery is free: it stores unverified suggestions, and verification is paid for just-in-time when a draft is actually sent.",
+    "Batch-discover email addresses for multiple contacts. Returns found, not-found and skipped lists. Contacts with a stored address are returned in found with their existing source, not newly discovered. Contacts not confirmed to work at their company are skipped. Hosted discovery uses workspace credits per contact needing research; existing addresses are returned without a lookup charge. Verification remains separate.",
   inputSchema: z.object({
+    operationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe(
+        "Hosted MCP: supply a new UUID for new research; reuse it exactly on retries.",
+      ),
     personIds: z
       .array(z.string().uuid())
       .max(25)
@@ -791,7 +874,7 @@ export const findEmails = tool({
         "Array of person IDs (max 25 per call). Call again for the next batch.",
       ),
   }),
-  execute: async ({ personIds }) => {
+  execute: async ({ personIds, operationId }, opts) => {
     // Same exposure as findEmail, once per id in the array.
     const session = await toolSession();
     if (!session) {
@@ -804,6 +887,11 @@ export const findEmails = tool({
       };
     }
     const { supabase, userId } = session;
+    const batchKey = toolOperationKey(
+      getCurrentIdentity()?.source ?? "web",
+      operationId,
+      opts?.toolCallId,
+    );
 
     const { data: rows, error: rowsError } = await supabase
       .from("people")
@@ -862,13 +950,18 @@ export const findEmails = tool({
         continue;
       }
       try {
-        const result = await findEmailForPerson(personId);
+        const result = await findEmailForPerson(personId, {
+          operationKey: batchKey
+            ? toolOperationKey("web", undefined, `${batchKey}:${personId}`)
+            : null,
+        });
         if (result.email) {
           found.push({ personId, email: result.email, source: result.source });
         } else {
           notFound.push(personId);
         }
-      } catch {
+      } catch (error) {
+        if (isHostedMode()) throw error;
         notFound.push(personId);
       }
     }
