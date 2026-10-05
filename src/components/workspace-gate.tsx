@@ -5,9 +5,11 @@ import { useEffect, useState, type ReactNode } from "react";
 
 export function WorkspaceGate({
   initialUser,
+  initialReady = true,
   children,
 }: {
   initialUser: string | null;
+  initialReady?: boolean;
   children: ReactNode;
 }) {
   const { isLoaded, userId } = useAuth();
@@ -16,7 +18,7 @@ export function WorkspaceGate({
   const [failedUser, setFailedUser] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!isLoaded || initialUser === currentUser) return;
+    if (!isLoaded || (initialReady && initialUser === currentUser)) return;
     if (!currentUser) {
       router.refresh();
       return;
@@ -39,9 +41,9 @@ export function WorkspaceGate({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [isLoaded, currentUser, initialUser, attempt, router]);
+  }, [isLoaded, currentUser, initialUser, initialReady, attempt, router]);
   if (!isLoaded) return <p role="status">Loading workspace…</p>;
-  if (initialUser === currentUser) return children;
+  if (initialReady && initialUser === currentUser) return children;
   if (currentUser && failedUser === currentUser)
     return (
       <div className="p-6">
@@ -62,6 +64,13 @@ export function WorkspaceGate({
   return (
     <div className="p-6">
       <p role="status">Preparing your workspace…</p>
+      {!currentUser && (
+        // A full navigation must remain available when the RSC refresh is stalled.
+        // eslint-disable-next-line @next/next/no-html-link-for-pages
+        <a className="min-h-11 underline" href="/login">
+          Sign in
+        </a>
+      )}
       <button
         className="min-h-11 underline"
         onClick={() => setAttempt((value) => value + 1)}

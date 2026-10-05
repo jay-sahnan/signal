@@ -11,8 +11,17 @@ export async function WorkspaceBootstrap({
 }) {
   if (isHostedMode()) {
     const { userId } = await auth();
-    if (userId) await resolveWorkspace(userId);
-    return <WorkspaceGate initialUser={userId}>{children}</WorkspaceGate>;
+    let initialReady = true;
+    try {
+      if (userId) await resolveWorkspace(userId);
+    } catch {
+      initialReady = false;
+    }
+    return (
+      <WorkspaceGate initialUser={userId} initialReady={initialReady}>
+        {children}
+      </WorkspaceGate>
+    );
   }
   return children;
 }
