@@ -2,7 +2,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CampaignSignal } from "@/lib/types/signal";
 
 export async function setCampaignSignal(db: SupabaseClient, campaignId: string, signalId: string, enabled: boolean) {
-  const result = await db.rpc("set_campaign_signal", { p_campaign: campaignId, p_signal: signalId, p_enabled: enabled });
+  let result = await db.rpc("set_campaign_signal", { p_campaign: campaignId, p_signal: signalId, p_enabled: enabled });
+  // Older self-hosted installations have not installed the owned-copy RPC.
+  // Only its explicit absence permits the original RLS-protected toggle write.
+  if (result.error?.code === "PGRST202") {
+    result = await db.from("campaign_signals").upsert(
+      { campaign_id: campaignId, signal_id: signalId, enabled },
+      { onConflict: "campaign_id,signal_id" },
+    ).select("*").single();
+  }
   const data = (Array.isArray(result.data) ? result.data[0] : result.data) as CampaignSignal | null;
   return { ...result, data, error: result.error ?? (data ? null : { message: "Signal activation returned no result" }) };
 }

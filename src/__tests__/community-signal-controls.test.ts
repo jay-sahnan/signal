@@ -27,3 +27,22 @@ it("does not report a missing activation result as success", async () => {
   await expect(toggleCampaignSignal.execute!({ campaignId: "campaign", signalId: "source", enabled: true }, {} as never))
     .rejects.toThrow("no result");
 });
+
+it("preserves legacy toggles when the new RPC is explicitly absent", async () => {
+  const { setCampaignSignal } = await import("@/lib/signals/community-copies");
+  const row = { signal_id: "signal", campaign_id: "campaign", enabled: true };
+  const single = vi.fn().mockResolvedValue({ data: row, error: null });
+  const upsert = vi.fn().mockReturnValue({ select: () => ({ single }) });
+  const db = { rpc: vi.fn().mockResolvedValue({ data: null, error: { code: "PGRST202", message: "Could not find public.set_campaign_signal" } }), from: vi.fn().mockReturnValue({ upsert }) };
+  expect(await setCampaignSignal(db as never, "campaign", "signal", true)).toMatchObject({ data: row, error: null });
+  expect(upsert).toHaveBeenCalledWith({ campaign_id: "campaign", signal_id: "signal", enabled: true }, { onConflict: "campaign_id,signal_id" });
+});
+for (const code of ["42501", "PGRST000", "42883"]) {
+  it(`never bypasses installed-RPC failures (${code}) with a direct write`, async () => {
+    const { setCampaignSignal } = await import("@/lib/signals/community-copies");
+    const error = { code, message: "Internal dependency failed" };
+    const db = { rpc: vi.fn().mockResolvedValue({ data: null, error }), from: vi.fn() };
+    expect(await setCampaignSignal(db as never, "campaign", "signal", true)).toHaveProperty("error", error);
+    expect(db.from).not.toHaveBeenCalled();
+  });
+}
