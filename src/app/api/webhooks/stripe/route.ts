@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import { isHostedMode } from "@/lib/auth/workspace";
-import { billingConfig } from "@/lib/billing/config";
+import { stripeConnectionConfig } from "@/lib/billing/prepaid-config";
 import { getStripe } from "@/lib/billing/stripe";
 import { processBillingEvent } from "@/lib/billing/events";
 
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   const raw = await boundedBody(request);
   if (raw === null) return new Response(null, { status: 413 });
   const stripe = getStripe();
-  const secret = billingConfig().webhookSecret;
+  const secret = stripeConnectionConfig().webhookSecret;
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(
