@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { requestBulkEmailLookup } from "@/lib/billing/bulk-email-request";
 import { requestEmailLookup } from "@/lib/billing/email-lookup-request";
 import { AFFILIATION_SEND_THRESHOLD } from "@/lib/affiliation-threshold";
 import Image from "next/image";
@@ -321,33 +322,28 @@ export function CompaniesList({
     }
   };
 
-  const findEmailsForCompany = async (organizationId: string | null) => {
+  const findEmailsForCompany = async (
+    organizationId: string | null,
+    newAttempt = false,
+  ) => {
     if (!organizationId) return;
     setFindingEmailsCompanyIds((prev) => new Set(prev).add(organizationId));
     try {
-      const res = await apiFetch("/api/find-email/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignId, organizationId }),
-      });
-      // apiFetch returns the Response unchanged and never throws on a non-2xx,
-      // so without this an error body reads as a run that found nobody, and a
-      // 401 stacks a green "Found 0 emails." on top of the session-expired
-      // toast apiFetch already raised.
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `HTTP ${res.status}`);
-      }
-      // The route skips contacts below the affiliation threshold and caps each
-      // batch, so the count it found can be lower than the button promised and
-      // there may be more still waiting. Its own summary says both; the local
-      // string is only a fallback for a response that predates it.
-      const data = (await res.json().catch(() => null)) as {
-        found?: unknown[];
-        skipped?: number;
-        remaining?: number;
-        summary?: string;
-      } | null;
+      const personIds = contacts
+        .filter(
+          (c) =>
+            c.organization_id === organizationId &&
+            !c.work_email &&
+            (c.affiliation_confidence ?? 0) >= AFFILIATION_THRESHOLD,
+        )
+        .map((c) => c.person_id);
+      const data = await requestBulkEmailLookup(
+        userId,
+        campaignId,
+        organizationId,
+        personIds,
+        newAttempt,
+      );
       const found = data?.found?.length ?? 0;
       const skipped = data?.skipped ?? 0;
       const remaining = data?.remaining ?? 0;
@@ -362,7 +358,17 @@ export function CompaniesList({
       onDataChanged();
     } catch (err) {
       console.error(`[find-email/bulk] Failed:`, err);
-      toast.error(err instanceof Error ? err.message : "Failed to find emails");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to find emails",
+        {
+          description:
+            "Retry keeps the original batch. A new batch can use additional credits; previous work may still be reserved.",
+          action: {
+            label: "New batch",
+            onClick: () => void findEmailsForCompany(organizationId, true),
+          },
+        },
+      );
     } finally {
       setFindingEmailsCompanyIds((prev) => {
         const next = new Set(prev);
