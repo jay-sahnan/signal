@@ -1,4 +1,5 @@
 "use client";
+import { requestContactDiscovery } from "@/lib/billing/contact-discovery-request";
 
 import { Fragment, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
@@ -233,26 +234,7 @@ export function CompaniesList({
   const findContactsHandler = async (companyId: string) => {
     setFindingContactsIds((prev) => new Set(prev).add(companyId));
     try {
-      const res = await apiFetch("/api/find-contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId, campaignId }),
-      });
-      // This used to await the call and ignore everything it returned. apiFetch
-      // does not throw on a non-2xx, so the catch below never fired either: a
-      // 403, a refusal and a successful run all looked identical from here,
-      // which is to say they all looked like nothing happening.
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `HTTP ${res.status}`);
-      }
-      const data = (await res.json().catch(() => null)) as {
-        contacts?: unknown[];
-        totalFound?: number;
-        uncertainCount?: number;
-        rejectedAsWrongCompany?: number;
-        error?: string;
-      } | null;
+      const data = await requestContactDiscovery(userId, "contacts", companyId, campaignId);
 
       onDataChanged();
 
@@ -283,7 +265,9 @@ export function CompaniesList({
       );
     } catch (err) {
       console.error(`[find-contacts] Failed:`, err);
-      toast.error(err instanceof Error ? err.message : "Failed to find leads.");
+      toast.error(err instanceof Error ? err.message : "Failed to find leads.", {
+        description: "Retry with Find leads. Credits may remain reserved until the original request is resolved.",
+      });
     } finally {
       setFindingContactsIds((prev) => {
         const next = new Set(prev);

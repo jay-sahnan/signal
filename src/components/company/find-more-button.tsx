@@ -5,7 +5,8 @@ import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api-fetch";
+import { useAuth } from "@clerk/nextjs";
+import { requestContactDiscovery } from "@/lib/billing/contact-discovery-request";
 
 interface FindMoreButtonProps {
   companyId: string;
@@ -24,23 +25,12 @@ export function FindMoreButton({
   campaignId,
   onComplete,
 }: FindMoreButtonProps) {
+  const { userId } = useAuth();
   const [busy, setBusy] = useState(false);
 
   async function run() {
     setBusy(true);
     try {
-      const res = await apiFetch(
-        `/api/companies/${companyId}/find-more-people`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ campaignId: campaignId ?? null }),
-        },
-      );
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `HTTP ${res.status}`);
-      }
       const {
         added,
         found,
@@ -48,7 +38,7 @@ export function FindMoreButton({
         rejectedAsWrongCompany,
         error,
         campaignId: linkedTo,
-      } = (await res.json()) as {
+      } = (await requestContactDiscovery(userId, "more", companyId, campaignId)) as {
         added: number;
         found: number;
         uncertainCount?: number;
@@ -88,6 +78,7 @@ export function FindMoreButton({
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to find more people",
+        { description: "Retry with this button. Credits may remain reserved until the original request is resolved." },
       );
     } finally {
       setBusy(false);
