@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { z } from "zod";
 import { executePaidAction, hasPaidAction } from "@/lib/billing/paid-action";
-import { CreditExecutionError } from "@/lib/billing/credit-execution";
+import { CreditExecutionError, NoBillableWork } from "@/lib/billing/credit-execution";
 
 import { loadAllSenderFacts } from "@/lib/sender-facts";
 import {
@@ -72,18 +72,23 @@ export async function POST(request: Request) {
     kind: "profile.research",
     request: { profileId: profile.id },
   };
+  const hasSources = urls.some((url) => typeof url === "string" && url.trim() && hostOf(url));
   try {
     if (
-      !urls.some((url) => typeof url === "string" && url.trim() && hostOf(url)) &&
+      !hasSources &&
       !(await hasPaidAction(paidInput))
     )
       return NextResponse.json(
         { error: "Add a profile URL before researching." },
         { status: 400 },
       );
-    const output = await executePaidAction(
+    const output = await executePaidAction<{ added: number; skippedAsDuplicates: number; error?: string }>(
       paidInput,
       async () => {
+        if (!hasSources) return new NoBillableWork({
+          added: 0, skippedAsDuplicates: 0,
+          error: "Add a profile URL before researching. No credits were charged.",
+        });
         const result = await researchSender(profile as UserProfile, user.id);
         if (!result.ok) throw new Error(result.error);
         const existingRes = await loadAllSenderFacts(supabase, profile.id);
