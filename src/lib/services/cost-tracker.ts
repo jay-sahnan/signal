@@ -217,6 +217,7 @@ export async function flushUsageTracking(): Promise<void> {
 }
 
 export function trackUsage(entry: UsageEntry): void {
+  const identity = getCurrentIdentity();
   const ctx = actionStore.getStore();
 
   const insert = (async () => {
@@ -233,11 +234,13 @@ export function trackUsage(entry: UsageEntry): void {
             ...(entry.metadata ?? {}),
             // Where the spend came from: the MCP route injects an identity;
             // the web app and jobs have none, so they read as "web".
-            source: getCurrentIdentity()?.source ?? "web",
+            source: identity?.source ?? "web",
           },
           campaign_id: entry.campaign_id ?? null,
-          // Explicit wins; otherwise inherit whoever the action belongs to.
-          user_id: entry.user_id ?? ctx?.user_id ?? null,
+          // Verified operation identity wins over a caller-provided attribution.
+          user_id: identity?.userId ?? entry.user_id ?? ctx?.user_id ?? null,
+          workspace_id: identity?.workspaceId ?? null,
+          credit_operation_id: identity?.operationId ?? null,
           action_id: ctx?.action_id ?? null,
           action_label: ctx?.action_label ?? null,
         });
