@@ -1,19 +1,19 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const h = vi.hoisted(() => ({ hosted: true, owner: "owner", links: [] as Array<{ id: string; person: { enrichment_status: string; name: string } }>, paid: vi.fn(), model: vi.fn(), writes: vi.fn(), selection: vi.fn(), profile: vi.fn() }));
+const h = vi.hoisted(() => ({ hosted: true, owner: "owner", links: [] as Array<{ id: string; person: { enrichment_status: string; name: string } }>, paid: vi.fn(), model: vi.fn(), writes: vi.fn(), selection: vi.fn(), usage: vi.fn(), scopes: [] as Array<Record<string, unknown>>, profile: vi.fn() }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
 vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
 vi.mock("@/lib/profile", () => ({ getProfileForPrompt: h.profile }));
 vi.mock("ai", async original => ({ ...(await original<typeof import("ai")>()), generateObject: h.model }));
 vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model" }));
-vi.mock("@/lib/services/cost-tracker", () => ({ withAction: (_label: string, work: () => unknown) => work(), trackUsage: vi.fn(), estimateClaudeCostFromUsage: () => 0 }));
+vi.mock("@/lib/services/cost-tracker", () => ({ withAction: (_label: string, work: () => unknown) => work(), trackUsage: h.usage, estimateClaudeCostFromUsage: () => 0 }));
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAndUser: async () => ({ user: { id: "owner" }, supabase: { from: (table: string) => {
   let writing = false;
   const filters: Record<string, unknown> = {};
   const q = { select: () => q, eq: (name: string, value: unknown) => { filters[name] = value; return q; }, in: (column: string, ids: string[]) => { h.selection(column, ids); return q; },
     update: (value: unknown) => { writing = true; h.writes(value); return q; },
     single: async () => ({ data: { user_id: h.owner, name: "Campaign", icp: {}, offering: {} }, error: null }),
-    then: (resolve: (value: unknown) => unknown) => resolve(writing ? { data: h.writes.mock.results.at(-1)?.value === false ? [] : [{ id: filters.id }], error: null }
-      : { data: table === "campaign_people" ? h.links : [], error: null }) };
+    then: (resolve: (value: unknown) => unknown) => { if (writing) h.scopes.push({ ...filters }); return resolve(writing ? { data: h.writes.mock.results.at(-1)?.value === false ? [] : [{ id: filters.id }], error: null }
+      : { data: table === "campaign_people" ? h.links : [], error: null }); } };
   return q;
 } } }) }));
 import { POST } from "@/app/api/refresh-scores/route";
@@ -25,7 +25,7 @@ const call = (ids: string[] | undefined = [id]) => POST(new Request("https://sig
   method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ campaignId: "campaign", campaignContactIds: ids }),
 }));
 beforeEach(() => {
-  vi.clearAllMocks(); h.hosted = true; h.owner = "owner";
+  vi.clearAllMocks(); h.hosted = true; h.owner = "owner"; h.scopes = [];
   h.links = [{ id, person: { enrichment_status: "enriched", name: "Alice" } }];
   h.profile.mockResolvedValue(null); h.writes.mockReturnValue(true);
   h.model.mockResolvedValue({ object: { scores: [{ id, score: 7, reason: "Fit" }] }, usage: {} });
@@ -59,12 +59,15 @@ for (const ids of [[], [id, id], Array(51).fill(id), ["invalid"]]) {
 it("does not write model-generated IDs outside the authorized selection", async () => {
   h.model.mockResolvedValue({ object: { scores: [{ id: other, score: 8, reason: "Wrong" }] }, usage: {} });
   expect((await call()).status).toBe(500); expect(h.model).toHaveBeenCalledOnce(); expect(h.writes).not.toHaveBeenCalled();
+  expect(h.usage).toHaveBeenCalledOnce();
 });
 it("throws from paid work when persistence fails instead of settling success", async () => {
   h.writes.mockReturnValue(false);
   let workError: unknown;
   h.paid.mockImplementation(async (_input, work) => { try { return await work(); } catch (error) { workError = error; throw error; } });
-  expect((await call()).status).toBe(500); expect(workError).toBeInstanceOf(Error); expect(h.writes).toHaveBeenCalledOnce();
+  const response = await call();
+  expect(response.status).toBe(500); expect(workError).toBeInstanceOf(Error); expect(h.writes).toHaveBeenCalledOnce();
+  expect((await response.json()).error).toMatch(/contact support/i);
 });
 it("preserves self-hosted scoring without prepaid billing", async () => {
   h.hosted = false;
@@ -82,6 +85,8 @@ it("binds a canonical contact selection and charges per selected contact", async
   expect(await (await call([other, id])).json()).toMatchObject({ scored: 2 });
   expect(h.paid).toHaveBeenCalledWith(expect.objectContaining({ units: 2, request: { campaignId: "campaign", campaignContactIds: [id, other] } }), expect.any(Function));
   expect(h.writes).toHaveBeenCalledTimes(2);
+  expect(h.selection).toHaveBeenCalledWith("id", [id, other]);
+  expect(h.scopes).toEqual([{ id, campaign_id: "campaign" }, { id: other, campaign_id: "campaign" }]);
 });
 it("settles an unenriched selection without a model call or charge", async () => {
   h.links[0].person.enrichment_status = "pending";
