@@ -1,3 +1,4 @@
+vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ userId: "owner" }) }));
 import {
   cleanup,
   fireEvent,
