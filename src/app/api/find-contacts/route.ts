@@ -1,3 +1,5 @@
+import { paidContactDiscovery } from "@/lib/billing/contact-discovery";
+import { CreditExecutionError } from "@/lib/billing/credit-execution";
 import { withAction } from "@/lib/services/cost-tracker";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 import { findContactsForOrganization } from "@/lib/services/contact-discovery";
@@ -5,6 +7,13 @@ import { findContactsForOrganization } from "@/lib/services/contact-discovery";
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
+  try { return await discover(request); }
+  catch (error) {
+    return Response.json({ error: error instanceof CreditExecutionError ? error.message : "Contact discovery failed. Retry the same request." },
+      { status: error instanceof CreditExecutionError ? error.status : 500 });
+  }
+}
+async function discover(request: Request) {
   const ctx = await getSupabaseAndUser();
   if (!ctx) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -86,17 +95,20 @@ export async function POST(request: Request) {
       // All discovery goes through the one shared path — this route used to hold
       // its own near-identical copy of it, as did the findContacts tool and the
       // enrich-company route, so any fix landed in one and stayed broken in two.
-      const result = await findContactsForOrganization(supabase, {
+      const result = await paidContactDiscovery({
+        identity: { userId: user.id, source: "web" }, key: request.headers.get("Idempotency-Key"),
+        request: { organizationId: orgId, campaignId, titles: null, numResults: 3, linkTeamPage: "matching" },
+      }, async () => ({ ...await findContactsForOrganization(supabase, {
         organizationId: orgId,
         campaignId,
         titles: boundedTitles,
         numResults: 3,
-      });
+      }), targetTitles: boundedTitles }));
 
       return Response.json({
         contacts: result.contacts,
         totalFound: result.totalFound,
-        targetTitles,
+        targetTitles: result.targetTitles,
         verifiedCount: result.verifiedCount,
         uncertainCount: result.uncertainCount,
         rejectedAsWrongCompany: result.rejectedAsWrongCompany,
