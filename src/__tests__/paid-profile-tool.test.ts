@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
     id: "11111111-1111-4111-8111-111111111111",
     user_id: "owner",
     company_url: "https://example.com",
+    company_name: null as string | null,
   },
 }));
 vi.mock("@/lib/auth/acting-user", () => ({
@@ -50,6 +51,7 @@ beforeEach(() => {
   h.existing.mockResolvedValue(false);
   h.profile.company_url = "https://example.com";
   h.profile.user_id = "owner";
+  h.profile.company_name = null;
   h.paid.mockResolvedValue({ ok: true, added: 2 });
 });
 it("sends verified MCP identity and the explicit retry UUID through the ledger", async () => {
@@ -133,7 +135,7 @@ it("finishes an unstarted reservation at zero charge when all profile URLs were 
 });
 
 it("does not present old research as current after source edits within one chat turn", async () => {
-  const revision = requestHash({ urls: [null, null, "https://example.com", null], name: null });
+  const revision = requestHash({ urls: [null, null, "https://example.com", null], name: null, companyName: null });
   h.paid.mockResolvedValue({ ok: true, added: 2, sourceRevision: revision });
   await withWebBillingTurn("turn", async () => {
     const original = await execute({ profileId: h.profile.id }, "web");
@@ -145,4 +147,29 @@ it("does not present old research as current after source edits within one chat 
     expect(result).not.toHaveProperty("added");
   });
   expect(h.research).not.toHaveBeenCalled();
+});
+
+vi.mock("@/lib/sender-facts", async original => ({ ...(await original<object>()), loadAllSenderFacts: async () => ({ ok: true, facts: [] }) }));
+it("persists source revision through real credit settlement and catches company-name edits on replay", async () => {
+  let saved: string | null = null;
+  h.research.mockResolvedValue({ ok: true, facts: [] });
+  h.rpc.mockImplementation(async (name, args) => {
+    if (name === "finish_serialized_credit_result") saved = args.p_result;
+    return { error: null, data: name === "reserve_credit_quote" ? { id: "op", state: saved ? "succeeded" : "reserved", credits: 3 }
+      : name === "read_serialized_credit_result" ? saved : true };
+  });
+  h.paid.mockImplementation(async (input, work) => executeWithCredits({ ...input, identity: { ...input.identity, workspaceId: "workspace" }, credits: 3, rateVersion: "v1" }, work));
+  await withWebBillingTurn("turn", async () => {
+    expect(await execute({ profileId: h.profile.id }, "web")).toMatchObject({ ok: true });
+    expect(JSON.parse(saved!).sourceRevision).toBeTruthy();
+    h.profile.company_name = "New Company";
+    expect(await execute({ profileId: h.profile.id }, "web")).toMatchObject({ error: expect.stringContaining("new message") });
+  });
+  expect(h.research).toHaveBeenCalledTimes(1);
+});
+it("warns before presenting revisionless saved research in a chat turn", async () => {
+  h.paid.mockResolvedValue({ ok: true, added: 2 });
+  await withWebBillingTurn("turn", async () => {
+    expect(await execute({ profileId: h.profile.id }, "web")).toMatchObject({ error: expect.stringContaining("new message") });
+  });
 });

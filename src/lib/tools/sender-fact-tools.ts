@@ -112,7 +112,7 @@ export const researchSenderProfile = tool({
       if (!hasSources && !(await hasPaidAction(paidInput)))
         return { error: "Add a usable profile URL before researching." };
     }
-    const sourceRevision = requestHash({ urls: urls.map(url => url ?? null), name: profile.name ?? null });
+    const sourceRevision = requestHash({ urls: urls.map(url => url ?? null), name: profile.name ?? null, companyName: profile.company_name ?? null });
     const outcome = await executePaidAction<
       ({ error: string } | {
         ok: boolean; added: number; skippedAsDuplicates: number;
@@ -178,9 +178,9 @@ export const researchSenderProfile = tool({
         };
       },
     );
-    if (identity.source === "web" && getWebBillingTurn() && outcome.sourceRevision
+    if (identity.source === "web" && getWebBillingTurn()
       && outcome.sourceRevision !== sourceRevision) return {
-      error: "Profile sources changed after this turn's research. Send a new message to research the updated profile. No additional credits were charged.",
+      error: "Saved research does not match the current profile sources. Send a new message to research the updated profile. No additional credits were charged.",
     };
     const response = { ...outcome };
     delete response.sourceRevision;
