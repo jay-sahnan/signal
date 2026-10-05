@@ -1,9 +1,9 @@
 import { BillingRequestError } from "@/lib/billing/account";
-import { billingStatus } from "@/lib/billing/management";
+import { prepaidStatus } from "@/lib/billing/prepaid-management";
 
 export async function GET() {
   try {
-    return Response.json(await billingStatus(), {
+    return Response.json(await prepaidStatus(), {
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch (error) {

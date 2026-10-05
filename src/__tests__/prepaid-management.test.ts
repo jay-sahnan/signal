@@ -133,3 +133,11 @@ it("uses the stored customer and fixed website return URL for the portal", async
     return_url: "https://signal.test/settings/billing",
   });
 });
+
+it("keeps the pending purchase quantity distinct from a changed pack", async () => {
+  h.order = { id: "order", credits: 75 };
+  expect(await prepaidStatus()).toMatchObject({
+    packCredits: 100,
+    pendingCredits: 75,
+  });
+});
