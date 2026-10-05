@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { requestRegeneration } from "@/lib/billing/regeneration-request";
 import { requestContactEnrichment } from "@/lib/billing/contact-enrichment-request";
 
 import {
@@ -125,6 +126,7 @@ function ReviewPageInner() {
   const [sendingDraftIds, setSendingDraftIds] = useState<Set<string>>(
     new Set(),
   );
+  const regenerationInFlight = useRef(new Set<string>());
   const [regeneratingDraftIds, setRegeneratingDraftIds] = useState<Set<string>>(
     new Set(),
   );
@@ -648,26 +650,18 @@ function ReviewPageInner() {
 
   const handleRegenerate = useCallback(
     async (draftId: string) => {
-      if (regeneratingDraftIds.has(draftId)) return;
+      if (regenerationInFlight.current.has(draftId)) return;
       const draft = drafts.find((d) => d.id === draftId);
       if (!draft) return;
       if (draft.review_status !== "pending" || draft.status !== "draft") {
         return;
       }
 
+      regenerationInFlight.current.add(draftId);
       setRegeneratingDraftIds((prev) => new Set(prev).add(draftId));
 
       try {
-        const res = await apiFetch("/api/outreach/regenerate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ draftId }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok) {
-          toast.error(data.error ?? "Failed to regenerate email");
-          return;
-        }
+        const data = await requestRegeneration(userId, draftId);
 
         const newSubject = data.subject as string;
         const newBodyHtml = data.bodyHtml as string;
@@ -706,6 +700,7 @@ function ReviewPageInner() {
           err instanceof Error ? err.message : "Failed to regenerate",
         );
       } finally {
+        regenerationInFlight.current.delete(draftId);
         setRegeneratingDraftIds((prev) => {
           const next = new Set(prev);
           next.delete(draftId);
@@ -713,7 +708,7 @@ function ReviewPageInner() {
         });
       }
     },
-    [drafts, regeneratingDraftIds, sequenceId],
+    [drafts, userId, sequenceId],
   );
 
   const handleContactEmailEdit = useCallback(
