@@ -53,3 +53,8 @@ it("does not charge when a domain-only request has no successful source", async 
   expect(await paidContactDiscovery(input, async () => result({ sourcesSucceeded: 0, searchesRun: [] })))
     .toBeInstanceOf(CompletedWithoutCharge);
 });
+
+it("keeps lost-response discovery pending instead of waiving its reservation", async () => {
+  await expect(paidContactDiscovery(input, async () => result({ sourcesSucceeded: 0, sourcesUncertain: true })))
+    .rejects.toThrow("unknown");
+});

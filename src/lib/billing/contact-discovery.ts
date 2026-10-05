@@ -14,6 +14,7 @@ export async function paidContactDiscovery<T extends ContactDiscoveryResult>(inp
       error: `${result.error ?? "Discovery could not start."} No credits were charged. After fixing the issue, start a new discovery request.`,
     });
     if (result.contacts.length === 0 && result.sourcesSucceeded === 0) {
+      if (result.sourcesUncertain) throw new Error("Contact discovery outcome is unknown; credits remain reserved pending reconciliation");
       return new CompletedWithoutCharge({ ...result,
         error: "All contact discovery sources failed. No credits were charged. Start a new request to try again.",
       });
