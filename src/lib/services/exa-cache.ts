@@ -1,13 +1,16 @@
 import { createHash } from "node:crypto";
 
+import { getCurrentIdentity } from "@/lib/auth/identity";
+import { isHostedMode } from "@/lib/auth/workspace";
 import { getAdminClient } from "@/lib/supabase/admin";
 
 import type { ExaSearchOptions, ExaSearchResponse } from "./exa-service";
 
 /**
- * Shared cache for Exa responses (table exa_search_cache).
+ * Workspace-scoped Exa response cache in hosted mode (table exa_search_cache).
  *
- * Fails open at every step: a missing table (migration not pushed yet), a
+ * Storage fails open; missing hosted identity fails closed before any search.
+ * A missing table (migration not pushed yet), a
  * network error or a malformed row all mean "no cache", never "no search".
  * People change jobs, so the TTL is short; findEmail's revalidate path and
  * anything else that must see fresh data passes `bypassCache`.
@@ -19,7 +22,13 @@ function normaliseQuery(query: string): string {
 }
 
 export function exaCacheKey(query: string, options: ExaSearchOptions): string {
+  const workspaceId = isHostedMode()
+    ? getCurrentIdentity()?.workspaceId
+    : undefined;
+  if (isHostedMode() && !workspaceId)
+    throw new Error("Workspace required for research cache");
   const canonical = JSON.stringify({
+    workspaceId,
     q: normaliseQuery(query),
     n: options.numResults ?? 10,
     t: options.searchType ?? "auto",
