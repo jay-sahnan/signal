@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
+import { toast } from "sonner";
 import { RotateCw, Sparkles } from "lucide-react";
 
 import { CampaignHeader } from "@/components/campaign/campaign-header";
@@ -21,7 +23,7 @@ import type {
   CampaignCompany,
   CampaignContact,
 } from "@/lib/types/campaign";
-import { apiFetch } from "@/lib/api-fetch";
+import { requestScoreRefresh } from "@/lib/billing/score-refresh-request";
 
 interface ActivityCounts {
   added: number;
@@ -38,6 +40,8 @@ const EMPTY_ACTIVITY: ActivityCounts = {
 export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>();
   const campaignId = params.id;
+  const { userId } = useAuth();
+  const scoreRequestActive = useRef(false);
   const { setActiveCampaignId, setAgentOpen } = useCampaign();
   const { isStreaming } = useStreaming();
 
@@ -342,22 +346,24 @@ export default function CampaignDetailPage() {
   }
 
   const refreshScores = async () => {
+    if (scoreRequestActive.current) return;
+    scoreRequestActive.current = true;
     setRefreshingScores(true);
     posthog.capture("contact_scores_refreshed", {
       campaign_id: campaignId,
       contact_count: contacts.length,
     });
     try {
-      await apiFetch("/api/refresh-scores", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignId }),
-      });
-      await fetchData();
+      const result = await requestScoreRefresh(userId, campaignId,
+        contacts.filter(contact => contact.enrichment_status === "enriched").map(contact => contact.id));
+      toast.success(`${result.scored} contact scores refreshed`);
     } catch (err) {
       console.error("[refresh-scores] Failed:", err);
+      toast.error(err instanceof Error ? err.message : "Score refresh failed. Retry the same request.");
     } finally {
+      scoreRequestActive.current = false;
       setRefreshingScores(false);
+      await fetchData();
     }
   };
 

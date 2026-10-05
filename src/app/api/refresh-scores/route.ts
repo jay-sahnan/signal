@@ -42,11 +42,12 @@ export async function POST(request: Request) {
   }
 
   const hosted = isHostedMode();
+  const boundedSelection = hosted || body.campaignContactIds !== undefined;
   let selectedIds: string[] = [];
   const key = request.headers.get("Idempotency-Key");
-  if (hosted) {
+  if (boundedSelection) {
     const selection = z.array(z.string().uuid()).min(1).max(50).safeParse(body.campaignContactIds);
-    if (!selection.success || !z.string().uuid().safeParse(key).success)
+    if (!selection.success || (hosted && !z.string().uuid().safeParse(key).success))
       return Response.json({ error: "Select 1–50 campaign contacts and provide a stable operation UUID" }, { status: 400 });
     selectedIds = selection.data.map(id => id.toLowerCase()).sort();
     if (new Set(selectedIds).size !== selectedIds.length)
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
       "id, person_id, person:people(id, name, title, linkedin_url, twitter_url, enrichment_data, enrichment_status, organization:organizations!organization_id(name, domain, industry, enrichment_data))",
     )
     .eq("campaign_id", campaignId);
-  if (hosted) selectionQuery = selectionQuery.in("id", selectedIds);
+  if (boundedSelection) selectionQuery = selectionQuery.in("id", selectedIds);
   const { data: links, error: linksError } = await selectionQuery;
 
   if (linksError) {
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (hosted && (links?.length !== selectedIds.length || links.some(link => !selectedIds.includes(link.id))))
+  if (boundedSelection && (links?.length !== selectedIds.length || links.some(link => !selectedIds.includes(link.id))))
     return Response.json({ error: "Selected campaign contacts not found" }, { status: 404 });
 
   // Filter to only enriched people
@@ -217,7 +218,7 @@ ${wrapUntrusted(JSON.stringify(contactSummaries, null, 2))}`,
 
       const allowed = new Set(enrichedLinks.map(link => link.id));
       const returned = result.object.scores.map(score => score.id);
-      if (hosted && (returned.length !== allowed.size || new Set(returned).size !== returned.length || returned.some(id => !allowed.has(id))))
+      if (boundedSelection && (returned.length !== allowed.size || new Set(returned).size !== returned.length || returned.some(id => !allowed.has(id))))
         throw new Error("Scoring returned an invalid contact selection");
 
       trackUsage({
