@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { getCurrentIdentity, type Identity } from "@/lib/auth/identity";
 import { isHostedMode, resolveWorkspace } from "@/lib/auth/workspace";
-import { CreditExecutionError, executeWithCredits } from "./credit-execution";
+import { CreditExecutionError, executeWithCredits, NoBillableWork } from "./credit-execution";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { quoteCredits } from "./credit-pricing";
 
@@ -72,9 +72,12 @@ export async function hasPaidAction(input: ActionIdentity): Promise<boolean> {
 /** Invoke after authentication, validation and resource authorization. */
 export async function executePaidAction<T>(
   input: PaidAction,
-  work: () => Promise<T>,
+  work: () => Promise<T | NoBillableWork<T>>,
 ): Promise<T> {
-  if (!isHostedMode()) return work();
+  if (!isHostedMode()) {
+    const result = await work();
+    return result instanceof NoBillableWork ? result.value : result;
+  }
   const { identity, key } = await resolveAction(input);
   const units = input.units ?? 1;
   let quote: { credits: number | null; rateVersion: string | null } = {

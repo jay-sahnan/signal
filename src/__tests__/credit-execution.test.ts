@@ -4,7 +4,7 @@ vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => h.hosted }));
 vi.mock("@/lib/supabase/admin", () => ({
   getAdminClient: () => ({ rpc: h.rpc }),
 }));
-import { executeWithCredits } from "@/lib/billing/credit-execution";
+import { executeWithCredits, NoBillableWork } from "@/lib/billing/credit-execution";
 import { getCurrentIdentity } from "@/lib/auth/identity";
 const input = {
   identity: {
@@ -177,4 +177,31 @@ it("confirms a lost start response with the same private execution token before 
   expect(calls).toHaveLength(2);
   expect(calls[0][1].p_attempt).toBe(calls[1][1].p_attempt);
   expect(work).toHaveBeenCalledTimes(1);
+});
+
+it("durably completes pre-provider rejection with zero credits and a replayable result", async () => {
+  const result = { status: "failed", errors: ["No sources"] };
+  expect(await executeWithCredits(input, async () => new NoBillableWork(result))).toEqual(result);
+  expect(h.rpc).toHaveBeenLastCalledWith("finish_serialized_credit_result",
+    expect.objectContaining({ p_charged: 0, p_result: JSON.stringify(result) }));
+});
+it("does not trust a JSON payload to waive the charge", async () => {
+  const payload = { noBillableWork: true, value: { status: "failed" } };
+  expect(await executeWithCredits(input, async () => payload)).toEqual(payload);
+  expect(h.rpc).toHaveBeenLastCalledWith("finish_serialized_credit_result",
+    expect.objectContaining({ p_charged: 5 }));
+});
+it("does not report unbilled completion when recording it fails", async () => {
+  h.rpc.mockImplementation(async (name) => ({
+    data: name === "reserve_credit_quote" ? { id: "operation", state: "reserved", credits: 5 } : true,
+    error: name === "finish_serialized_credit_result" ? { message: "offline" } : null,
+  }));
+  await expect(executeWithCredits(input, async () => new NoBillableWork({ status: "failed" }))).rejects.toThrow("settlement");
+  expect(h.rpc).toHaveBeenLastCalledWith("finish_credit_operation",
+    expect.objectContaining({ p_state: "uncertain", p_charged: null }));
+});
+it("unwraps unbilled results in self-hosted mode without touching the ledger", async () => {
+  h.hosted = false;
+  expect(await executeWithCredits(input, async () => new NoBillableWork("skipped"))).toBe("skipped");
+  expect(h.rpc).not.toHaveBeenCalled();
 });
