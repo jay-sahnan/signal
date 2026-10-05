@@ -47,7 +47,7 @@ export function EnrichAllButton({
 
   if (unenrichedCount <= 0) return null;
 
-  const run = async (newAttempt = false) => {
+  const run = async () => {
     setRunning(true);
     try {
       const data = await requestBulkEnrichment(
@@ -55,7 +55,6 @@ export function EnrichAllButton({
         campaignId,
         organizationId,
         personIds,
-        newAttempt,
       );
 
       // The route caps each batch and skips anyone already enriched, so its
@@ -70,8 +69,7 @@ export function EnrichAllButton({
       console.error("[enrich/bulk] Failed:", err);
       toast.error(err instanceof Error ? err.message : "Failed to enrich", {
         description:
-          "Retry keeps the original batch. A new batch can use additional credits; previous work may still be reserved.",
-        action: { label: "New batch", onClick: () => void run(true) },
+          "Use the batch button to retry the same batch. Credits may remain reserved while its outcome is unresolved.",
       });
     } finally {
       setRunning(false);

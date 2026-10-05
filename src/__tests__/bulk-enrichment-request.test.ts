@@ -2,8 +2,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api-fetch", () => ({ apiFetch: fetchMock }));
 import { requestBulkEnrichment } from "@/lib/billing/bulk-enrichment-request";
-const call = (ids: string[], fresh = false) =>
-  requestBulkEnrichment("owner", "campaign", "org", ids, fresh);
+const call = (ids: string[]) =>
+  requestBulkEnrichment("owner", "campaign", "org", ids);
 beforeEach(() => {
   sessionStorage.clear();
   fetchMock.mockReset();
@@ -29,16 +29,16 @@ it("retains the original bounded selection and key through partial failure", asy
   );
   expect(sessionStorage.length).toBe(0);
 });
-it("only explicit new work replaces the saved batch", async () => {
+it("keeps unresolved work when the visible selection changes", async () => {
   fetchMock.mockImplementation(async () =>
     Response.json({ error: "Pending" }, { status: 409 }),
   );
   await expect(call(["old"])).rejects.toThrow();
-  await expect(call(["new"], true)).rejects.toThrow();
+  await expect(call(["new"])).rejects.toThrow();
   expect(JSON.parse(fetchMock.mock.calls[1][1].body).personIds).toEqual([
-    "new",
+    "old",
   ]);
-  expect(fetchMock.mock.calls[1][1].headers["Idempotency-Key"]).not.toBe(
+  expect(fetchMock.mock.calls[1][1].headers["Idempotency-Key"]).toBe(
     fetchMock.mock.calls[0][1].headers["Idempotency-Key"],
   );
 });

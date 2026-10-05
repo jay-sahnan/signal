@@ -173,13 +173,12 @@ export function CompaniesList({
 
   const enrichContact = async (
     contactId: string,
-    newAttempt = false,
   ): Promise<void> => {
     setEnrichingIds((prev) => new Set(prev).add(contactId));
     try {
       const personId =
         contacts.find((c) => c.id === contactId)?.person_id ?? contactId;
-      await requestContactEnrichment(userId, personId, newAttempt);
+      await requestContactEnrichment(userId, personId);
       // Deliberately does NOT expand the row. Enriching is something you do to
       // a list, often several in a row, and force-opening each one shoves
       // everything below it down the page mid-scan. The data updates in place;
@@ -189,11 +188,7 @@ export function CompaniesList({
       console.error(`[enrich] Failed:`, err);
       toast.error(err instanceof Error ? err.message : "Enrichment failed", {
         description:
-          "Retry keeps the same request. New enrichment can use additional credits; previous work may still be reserved.",
-        action: {
-          label: "New enrichment",
-          onClick: () => void enrichContact(contactId, true),
-        },
+          "Use the enrichment button to retry the same request. Credits may remain reserved while its outcome is unresolved.",
       });
     } finally {
       setEnrichingIds((prev) => {
@@ -300,21 +295,16 @@ export function CompaniesList({
 
   const findEmailForContact = async (
     contact: CampaignContact,
-    newAttempt = false,
   ) => {
     setFindingEmailIds((prev) => new Set(prev).add(contact.id));
     try {
-      await requestEmailLookup(userId, contact.person_id, newAttempt);
+      await requestEmailLookup(userId, contact.person_id);
       onDataChanged();
     } catch (err) {
       console.error(`[find-email] Failed:`, err);
       toast.error(err instanceof Error ? err.message : "Email lookup failed.", {
         description:
-          "Retry keeps the same request. Starting a new lookup can use additional credits; previous work may still be reserved.",
-        action: {
-          label: "New lookup",
-          onClick: () => void findEmailForContact(contact, true),
-        },
+          "Use the email lookup button to retry the same request. Credits may remain reserved while its outcome is unresolved.",
       });
     } finally {
       setFindingEmailIds((prev) => {
@@ -327,7 +317,6 @@ export function CompaniesList({
 
   const findEmailsForCompany = async (
     organizationId: string | null,
-    newAttempt = false,
   ) => {
     if (!organizationId) return;
     setFindingEmailsCompanyIds((prev) => new Set(prev).add(organizationId));
@@ -345,7 +334,6 @@ export function CompaniesList({
         campaignId,
         organizationId,
         personIds,
-        newAttempt,
       );
       const found = data?.found?.length ?? 0;
       const skipped = data?.skipped ?? 0;
@@ -365,11 +353,7 @@ export function CompaniesList({
         err instanceof Error ? err.message : "Failed to find emails",
         {
           description:
-            "Retry keeps the original batch. A new batch can use additional credits; previous work may still be reserved.",
-          action: {
-            label: "New batch",
-            onClick: () => void findEmailsForCompany(organizationId, true),
-          },
+            "Use the batch button to retry the same batch. Credits may remain reserved while its outcome is unresolved.",
         },
       );
     } finally {

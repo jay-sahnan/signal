@@ -572,7 +572,7 @@ function FactBankSection({
     }
   };
 
-  const handleResearch = async (newAttempt = false) => {
+  const handleResearch = async () => {
     setResearching(true);
     setResearchNote(null);
     setResearchError(null);
@@ -580,7 +580,7 @@ function FactBankSection({
       if (!userId) throw new Error("Sign in before researching.");
       // Keep the same operation across retries and reloads until success.
       const storageKey = `signal:research:${userId}:${profileId}`;
-      let operationKey = newAttempt ? null : sessionStorage.getItem(storageKey);
+      let operationKey = sessionStorage.getItem(storageKey);
       if (!operationKey) {
         operationKey = crypto.randomUUID();
         sessionStorage.setItem(storageKey, operationKey);
@@ -597,7 +597,8 @@ function FactBankSection({
       if (!res.ok) {
         setResearchError(json.error ?? "Research failed");
       } else {
-        sessionStorage.removeItem(storageKey);
+        if (sessionStorage.getItem(storageKey) === operationKey)
+          sessionStorage.removeItem(storageKey);
         // A failed refetch keeps the current list on screen: wiping it right
         // after "+N facts added" makes research look like it deleted the bank.
         try {
@@ -651,18 +652,10 @@ function FactBankSection({
             {researchError}
           </p>
           <p className="text-muted-foreground text-sm">
-            Retrying keeps your existing request. If you edited this profile or
-            want to try again as new work, start a new request. It can use
-            additional credits; any previous pending credits remain reserved.
-            Contact support to resolve a pending request.
+            Use Research my profile to retry the same request. Credits may remain
+            reserved while its outcome is unresolved. Contact support if the
+            request stays pending.
           </p>
-          <Button
-            variant="outline"
-            disabled={researching || !userId}
-            onClick={() => void handleResearch(true)}
-          >
-            Start a new research request
-          </Button>
         </div>
       )}
       {researchNote && (

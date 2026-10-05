@@ -7,11 +7,10 @@ export async function requestBulkEnrichment(
   campaignId: string,
   organizationId: string,
   personIds: string[],
-  newAttempt = false,
 ) {
   if (!userId) throw new Error("Sign in before enriching contacts.");
   const storageKey = `signal:enrichment-batch:${userId}:${campaignId}:${organizationId}`;
-  const saved = newAttempt ? null : sessionStorage.getItem(storageKey);
+  const saved = sessionStorage.getItem(storageKey);
   const batch: { key: string; personIds: string[] } = saved
     ? JSON.parse(saved)
     : {

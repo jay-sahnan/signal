@@ -5,11 +5,10 @@ import { apiFetch } from "@/lib/api-fetch";
 export async function requestEmailLookup(
   userId: string | null | undefined,
   personId: string,
-  newAttempt = false,
 ) {
   if (!userId) throw new Error("Sign in before looking up an email.");
   const storageKey = `signal:email-lookup:${userId}:${personId}`;
-  let key = newAttempt ? null : sessionStorage.getItem(storageKey);
+  let key = sessionStorage.getItem(storageKey);
   if (!key) {
     key = crypto.randomUUID();
     sessionStorage.setItem(storageKey, key);

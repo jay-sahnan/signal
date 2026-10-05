@@ -195,20 +195,15 @@ export default function CompanyPage() {
   const enrichContact = useCallback(
     async function retryEnrichment(
       personId: string,
-      newAttempt = false,
     ): Promise<void> {
       try {
-        await requestContactEnrichment(userId, personId, newAttempt);
+        await requestContactEnrichment(userId, personId);
         await fetchCore();
       } catch (err) {
         console.error("[enrich] Failed:", err);
         toast.error(err instanceof Error ? err.message : "Enrichment failed", {
           description:
-            "Retry keeps the same request. New enrichment can use additional credits; previous work may still be reserved.",
-          action: {
-            label: "New enrichment",
-            onClick: () => void retryEnrichment(personId, true),
-          },
+            "Use the enrichment button to retry the same request. Credits may remain reserved while its outcome is unresolved.",
         });
       }
     },

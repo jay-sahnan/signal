@@ -7,11 +7,10 @@ export async function requestBulkEmailLookup(
   campaignId: string,
   organizationId: string,
   personIds: string[],
-  newAttempt = false,
 ) {
   if (!userId) throw new Error("Sign in before looking up emails.");
   const storageKey = `signal:email-batch:${userId}:${campaignId}:${organizationId}`;
-  const saved = newAttempt ? null : sessionStorage.getItem(storageKey);
+  const saved = sessionStorage.getItem(storageKey);
   const batch: { key: string; personIds: string[] } = saved
     ? JSON.parse(saved)
     : {

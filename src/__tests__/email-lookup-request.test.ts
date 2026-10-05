@@ -35,13 +35,13 @@ it("preserves the key on credit rejection, and isolates users and people", async
   expect(keys()[0]).toBe(keys()[1]);
   expect(new Set(keys()).size).toBe(3);
 });
-it("creates a different key only for an explicit new attempt after failure", async () => {
+it("retains the request when its outcome is uncertain", async () => {
   fetchMock.mockImplementation(async () =>
     Response.json({ error: "Outcome uncertain" }, { status: 409 }),
   );
   await expect(requestEmailLookup("owner", "person")).rejects.toThrow();
-  await expect(requestEmailLookup("owner", "person", true)).rejects.toThrow();
-  expect(keys()[0]).not.toBe(keys()[1]);
+  await expect(requestEmailLookup("owner", "person")).rejects.toThrow();
+  expect(keys()[0]).toBe(keys()[1]);
 });
 it("retains the key when the successful response body is unreadable", async () => {
   fetchMock.mockResolvedValue(new Response("truncated", { status: 200 }));
