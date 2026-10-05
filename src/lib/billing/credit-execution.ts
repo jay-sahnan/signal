@@ -52,7 +52,7 @@ export async function executeWithCredits<T>(
     throw new CreditExecutionError("Workspace identity required", 401);
   const hash = requestHash(input.request);
   const db = getAdminClient();
-  const reserved = await db.rpc("reserve_credits", {
+  const reserved = await db.rpc("reserve_credit_quote", {
     p_workspace: identity.workspaceId,
     p_user: identity.userId,
     p_key: input.key,
@@ -73,7 +73,12 @@ export async function executeWithCredits<T>(
       409,
     );
   }
-  const op = reserved.data as { id: string; state: string; result: T };
+  const op = reserved.data as {
+    id: string;
+    state: string;
+    credits: number;
+    result: T;
+  };
   if (op.state === "succeeded") return op.result;
   if (op.state !== "reserved")
     throw new CreditExecutionError(
@@ -103,7 +108,7 @@ export async function executeWithCredits<T>(
       p_id: op.id,
       p_user: identity.userId,
       p_state: "succeeded",
-      p_charged: input.credits,
+      p_charged: op.credits,
       p_result: JSON.parse(serialized),
     });
     if (settled.error)

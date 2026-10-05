@@ -24,15 +24,15 @@ beforeEach(() => {
   h.rpc.mockImplementation(async (name) => ({
     error: null,
     data:
-      name === "reserve_credits"
-        ? { id: "operation", state: "reserved" }
+      name === "reserve_credit_quote"
+        ? { id: "operation", state: "reserved", credits: 5 }
         : true,
   }));
 });
 it("reserves and starts before work, then settles once with its replayable result", async () => {
   const work = vi.fn(async () => {
     expect(h.rpc.mock.calls.map((c) => c[0])).toEqual([
-      "reserve_credits",
+      "reserve_credit_quote",
       "start_credit_operation",
     ]);
     expect(getCurrentIdentity()?.operationId).toBe("operation");
@@ -77,7 +77,9 @@ it.each(["running", "uncertain", "released"])(
 );
 it("does not run after another request wins the start transition", async () => {
   h.rpc
-    .mockResolvedValueOnce({ data: { id: "operation", state: "reserved" } })
+    .mockResolvedValueOnce({
+      data: { id: "operation", state: "reserved", credits: 5 },
+    })
     .mockResolvedValueOnce({ data: false });
   const work = vi.fn();
   await expect(executeWithCredits(input, work)).rejects.toThrow();
@@ -101,8 +103,8 @@ it("retains the reservation on ambiguous provider failure", async () => {
 it("never repeats work when saving a successful result fails", async () => {
   h.rpc.mockImplementation(async (name) => ({
     data:
-      name === "reserve_credits"
-        ? { id: "operation", state: "reserved" }
+      name === "reserve_credit_quote"
+        ? { id: "operation", state: "reserved", credits: 5 }
         : true,
     error: name === "finish_credit_operation" ? { message: "offline" } : null,
   }));
@@ -124,6 +126,17 @@ it("hashes object keys consistently for semantic retries", async () => {
     { ...input, request: { a: 1, b: 2 } },
     async () => null,
   );
-  const calls = h.rpc.mock.calls.filter((c) => c[0] === "reserve_credits");
+  const calls = h.rpc.mock.calls.filter((c) => c[0] === "reserve_credit_quote");
   expect(calls[0][1].p_hash).toBe(calls[1][1].p_hash);
+});
+
+it("settles the frozen quote returned by the database after a rate change", async () => {
+  await executeWithCredits(
+    { ...input, credits: 10, rateVersion: "v2" },
+    async () => null,
+  );
+  expect(h.rpc).toHaveBeenLastCalledWith(
+    "finish_credit_operation",
+    expect.objectContaining({ p_charged: 5 }),
+  );
 });
