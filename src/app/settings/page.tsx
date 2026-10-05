@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 
@@ -45,6 +46,13 @@ export default function SettingsPage() {
             Manage your account and preferences.
           </p>
         </div>
+
+        <Link
+          href="/settings/billing"
+          className="inline-flex min-h-11 items-center text-sm underline"
+        >
+          Billing and subscription
+        </Link>
 
         <Tabs defaultValue="email" className="space-y-6">
           <TabsList>
