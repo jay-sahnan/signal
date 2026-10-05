@@ -97,9 +97,11 @@ export async function POST(request: Request) {
     return person?.enrichment_status === "enriched";
   });
 
+  let enteredWork = false;
   const work = () => withAction(
     `Score contacts: ${campaign.name}`,
     async () => {
+      enteredWork = true;
       if (hosted && enrichedLinks.length !== selectedIds.length)
         return new NoBillableWork({ scored: 0, message: "All selected contacts must be enriched. No credits were charged. Start a new request after enriching them." });
       if (enrichedLinks.length === 0) {
@@ -216,11 +218,6 @@ Contacts to score (enrichment data scraped from LinkedIn, Twitter, news):
 ${wrapUntrusted(JSON.stringify(contactSummaries, null, 2))}`,
       });
 
-      const allowed = new Set(enrichedLinks.map(link => link.id));
-      const returned = result.object.scores.map(score => score.id);
-      if (boundedSelection && (returned.length !== allowed.size || new Set(returned).size !== returned.length || returned.some(id => !allowed.has(id))))
-        throw new Error("Scoring returned an invalid contact selection");
-
       trackUsage({
         service: "claude",
         operation: "score-contacts",
@@ -237,6 +234,11 @@ ${wrapUntrusted(JSON.stringify(contactSummaries, null, 2))}`,
         campaign_id: campaignId,
         user_id: user.id,
       });
+
+      const allowed = new Set(enrichedLinks.map(link => link.id));
+      const returned = result.object.scores.map(score => score.id);
+      if (boundedSelection && (returned.length !== allowed.size || new Set(returned).size !== returned.length || returned.some(id => !allowed.has(id))))
+        throw new Error("Scoring returned an invalid contact selection");
 
       // Batch update scores on campaign_people junction table. Each write's
       // outcome is read: query builders never reject, so a bare Promise.all
@@ -279,7 +281,9 @@ ${wrapUntrusted(JSON.stringify(contactSummaries, null, 2))}`,
       kind: "contact.score", units: selectedIds.length, request: { campaignId, campaignContactIds: selectedIds } }, work) : await work();
     return Response.json(result);
   } catch (error) {
-    return Response.json({ error: error instanceof CreditExecutionError ? error.message : "Score refresh failed. Retry the same request." },
+    return Response.json({ error: error instanceof CreditExecutionError ? error.message : hosted && enteredWork
+      ? "Score refresh outcome is uncertain. Credits remain reserved; contact support to reconcile this request."
+      : "Score refresh failed. Retry the same request." },
       { status: error instanceof CreditExecutionError ? error.status : 500 });
   }
 }
