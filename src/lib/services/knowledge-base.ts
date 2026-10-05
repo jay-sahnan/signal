@@ -359,6 +359,7 @@ export async function mergeEnrichmentData(
   // Cron paths pass the admin client: the default session client is anon
   // on the public /api/jobs route, so their writes silently no-oped.
   client?: Awaited<ReturnType<typeof createClient>>,
+  confirmWrite = false,
 ): Promise<void> {
   const supabase = client ?? (await createClient());
 
@@ -394,7 +395,7 @@ export async function mergeEnrichmentData(
     }
   }
 
-  const { error: writeError } = await supabase
+  const write = supabase
     .from(table)
     .update({
       enrichment_data: merged,
@@ -403,6 +404,11 @@ export async function mergeEnrichmentData(
         status === "enriched" ? new Date().toISOString() : undefined,
     })
     .eq("id", id);
+
+  const written = confirmWrite ? await write.select("id").maybeSingle() : await write;
+  const writeError = written.error;
+  if (confirmWrite && !writeError && !written.data)
+    throw new Error("Enrichment was not saved; the record is no longer writable");
 
   // Callers report "enriched" on return, so a swallowed write error here
   // means paid API results are reported as saved and silently lost.

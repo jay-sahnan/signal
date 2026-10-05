@@ -2677,10 +2677,11 @@ export const updateCompanyStatus = tool({
   },
 });
 
-export const getGoogleReviews = tool({
+const googleReviewsImpl = tool({
   description:
     "Fetch Google Reviews for a company using the Google Places API. Returns rating, review count, and recent review text. Use this to gauge customer sentiment and find outreach hooks.",
   inputSchema: z.object({
+    operationId: z.string().uuid().optional().describe("Hosted MCP: reuse this UUID for retries; a new UUID is a new paid lookup."),
     organizationId: z
       .string()
       .uuid()
@@ -2710,6 +2711,8 @@ export const getGoogleReviews = tool({
       input.domain,
     );
 
+    if (isHostedMode() && result.error) throw new Error(result.error);
+
     if (result.found) {
       await mergeEnrichmentData("organizations", input.organizationId, {
         googleReviews: {
@@ -2719,7 +2722,7 @@ export const getGoogleReviews = tool({
           topReviews: result.reviews.slice(0, 5),
           fetchedAt: new Date().toISOString(),
         },
-      });
+      }, "enriched", undefined, isHostedMode());
     }
 
     let signalTracked = false;
@@ -2763,9 +2766,34 @@ export const getGoogleReviews = tool({
       }
     }
 
+    if (isHostedMode() && input.campaignId && !signalTracked)
+      throw new Error("Review history could not be saved");
     return { ...result, ...(input.campaignId ? { signalTracked } : {}) };
   },
 });
+
+export const getGoogleReviews = {
+  ...googleReviewsImpl,
+  execute: async (...args: Parameters<NonNullable<typeof googleReviewsImpl.execute>>) => {
+    const [input, opts] = args;
+    if (!isHostedMode()) return googleReviewsImpl.execute!(input, opts);
+    const session = await toolSession();
+    if (!session || !(await callerHoldsOrganization(session.supabase, session.userId, input.organizationId)))
+      return notFound("Company");
+    if (input.campaignId) {
+      const { data, error } = await session.supabase.from("campaigns")
+        .select("user_id").eq("id", input.campaignId).maybeSingle();
+      if (error || data?.user_id !== session.userId) return { error: "Campaign not found." };
+    }
+    const identity = getCurrentIdentity() ?? { userId: session.userId, source: "web" as const };
+    return executePaidAction({ identity,
+      key: toolOperationKey(identity.source, input.operationId, opts.toolCallId),
+      kind: "company.reviews",
+      request: { organizationId: input.organizationId, companyName: input.companyName,
+        domain: input.domain ?? null, location: input.location ?? null, campaignId: input.campaignId ?? null },
+    }, async () => googleReviewsImpl.execute!(input, opts));
+  },
+};
 
 export const getDataQualityReport = tool({
   description:
