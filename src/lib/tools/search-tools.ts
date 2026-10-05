@@ -1,3 +1,8 @@
+import { executePaidAction } from "@/lib/billing/paid-action";
+import { toolOperationKey } from "@/lib/billing/tool-operation-key";
+import { getCurrentIdentity } from "@/lib/auth/identity";
+import { actingUserId } from "@/lib/auth/acting-user";
+import { isHostedMode } from "@/lib/auth/workspace";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject, tool } from "ai";
 import { z } from "zod";
@@ -51,6 +56,13 @@ export const searchCompanies = tool({
   description:
     "Search for companies using Exa semantic search. Stores results in the shared knowledge base. When campaignId is provided, links results to the campaign and deduplicates against existing campaign companies.",
   inputSchema: z.object({
+    operationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe(
+        "Hosted MCP: new UUID for new paid search; reuse the same UUID for retries.",
+      ),
     campaignId: z
       .string()
       .uuid()
@@ -82,104 +94,143 @@ export const searchCompanies = tool({
       .default(false)
       .describe("Include full page text for richer context"),
   }),
-  execute: async (input) => {
-    const exa = new ExaService();
+  execute: async (input, opts) => {
     const supabase = await createClient();
-
-    const searchResponse = await exa.search(input.query, {
-      numResults: input.numResults,
-      category: input.category as SearchCategory | undefined,
-      includeText: input.includeText,
-    });
-
-    // Fetch existing organizations already linked to this campaign for dedup
-    const existingDomains = new Set<string>();
-    if (input.campaignId) {
-      const { data: existingLinks } = await supabase
-        .from("campaign_organizations")
-        .select("organization:organizations(domain)")
-        .eq("campaign_id", input.campaignId);
-      for (const l of existingLinks || []) {
-        const d = (
-          l.organization as unknown as { domain: string | null } | null
-        )?.domain;
-        if (d) existingDomains.add(d);
-      }
-    }
-
-    const results: Array<{
-      name: string;
-      domain: string | null;
-      url: string;
-      description: string | null;
-    }> = [];
-    let duplicatesSkipped = 0;
-    const seenDomains = new Set<string>();
-
-    let directoriesFiltered = 0;
-
-    for (const result of searchResponse.results) {
-      let domain: string | null = null;
-      try {
-        domain = normalizeDomain(new URL(result.url).hostname);
-      } catch {
-        // skip
-      }
-
-      // Skip directory / aggregator sites
-      if (isDirectoryDomain(domain)) {
-        directoriesFiltered++;
-        continue;
-      }
-
-      // Dedup within batch and against campaign
-      if (domain) {
-        if (existingDomains.has(domain) || seenDomains.has(domain)) {
-          duplicatesSkipped++;
-          continue;
-        }
-        seenDomains.add(domain);
-      }
-
-      // Prefer a brand label derived from the apex domain over Exa's raw page
-      // <title>, which is often messy ("Mintlify - The Intelligent Knowledge
-      // Platform", "Introduction - Mintlify"). Title falls back to identifying
-      // directory listings only.
-      const name = domain ? brandFromDomain(domain) : result.title || "Unknown";
-
-      if (isDirectoryTitle(result.title || name)) {
-        directoriesFiltered++;
-        continue;
-      }
-      const summary = result.summary || result.text?.slice(0, 500) || null;
-      const description =
-        result.title && summary && !summary.includes(result.title)
-          ? `${result.title}: ${summary}`
-          : summary || result.title || null;
-
-      const org = await findOrCreateOrganization({
-        name,
-        domain,
-        url: result.url,
-        description,
-        source: "exa",
-      });
-
-      if (input.campaignId) {
-        await linkOrganizationToCampaign(org.id, input.campaignId);
-      }
-
-      results.push({ name, domain, url: result.url, description });
-    }
-
-    return {
-      companies: results,
-      totalFound: searchResponse.resultCount,
-      newCompanies: results.length,
-      duplicatesSkipped,
-      directoriesFiltered,
-      query: input.query,
+    const identity = getCurrentIdentity() ?? {
+      userId: isHostedMode() ? ((await actingUserId()) ?? "") : "",
+      source: "web" as const,
     };
+    if (isHostedMode()) {
+      if (!identity.userId) return { error: "Not authenticated." };
+      if (input.campaignId) {
+        const { data: campaign, error } = await supabase
+          .from("campaigns")
+          .select("user_id")
+          .eq("id", input.campaignId)
+          .maybeSingle();
+        if (error || campaign?.user_id !== identity.userId)
+          return { error: "Campaign not found." };
+      }
+    }
+    return executePaidAction(
+      {
+        identity,
+        key: toolOperationKey(
+          identity.source,
+          input.operationId,
+          opts.toolCallId,
+        ),
+        kind: "company.search",
+        units: input.numResults,
+        request: {
+          query: input.query,
+          numResults: input.numResults,
+          includeText: input.includeText,
+          category: input.category ?? null,
+          campaignId: input.campaignId ?? null,
+        },
+      },
+      async () => {
+        const exa = new ExaService();
+
+        const searchResponse = await exa.search(input.query, {
+          numResults: input.numResults,
+          category: input.category as SearchCategory | undefined,
+          includeText: input.includeText,
+        });
+
+        // Fetch existing organizations already linked to this campaign for dedup
+        const existingDomains = new Set<string>();
+        if (input.campaignId) {
+          const { data: existingLinks } = await supabase
+            .from("campaign_organizations")
+            .select("organization:organizations(domain)")
+            .eq("campaign_id", input.campaignId);
+          for (const l of existingLinks || []) {
+            const d = (
+              l.organization as unknown as { domain: string | null } | null
+            )?.domain;
+            if (d) existingDomains.add(d);
+          }
+        }
+
+        const results: Array<{
+          name: string;
+          domain: string | null;
+          url: string;
+          description: string | null;
+        }> = [];
+        let duplicatesSkipped = 0;
+        const seenDomains = new Set<string>();
+
+        let directoriesFiltered = 0;
+
+        for (const result of searchResponse.results) {
+          let domain: string | null = null;
+          try {
+            domain = normalizeDomain(new URL(result.url).hostname);
+          } catch {
+            // skip
+          }
+
+          // Skip directory / aggregator sites
+          if (isDirectoryDomain(domain)) {
+            directoriesFiltered++;
+            continue;
+          }
+
+          // Dedup within batch and against campaign
+          if (domain) {
+            if (existingDomains.has(domain) || seenDomains.has(domain)) {
+              duplicatesSkipped++;
+              continue;
+            }
+            seenDomains.add(domain);
+          }
+
+          // Prefer a brand label derived from the apex domain over Exa's raw page
+          // <title>, which is often messy ("Mintlify - The Intelligent Knowledge
+          // Platform", "Introduction - Mintlify"). Title falls back to identifying
+          // directory listings only.
+          const name = domain
+            ? brandFromDomain(domain)
+            : result.title || "Unknown";
+
+          if (isDirectoryTitle(result.title || name)) {
+            directoriesFiltered++;
+            continue;
+          }
+          const summary = result.summary || result.text?.slice(0, 500) || null;
+          const description =
+            result.title && summary && !summary.includes(result.title)
+              ? `${result.title}: ${summary}`
+              : summary || result.title || null;
+
+          const org = await findOrCreateOrganization({
+            name,
+            domain,
+            url: result.url,
+            description,
+            source: "exa",
+          });
+
+          if (input.campaignId) {
+            await linkOrganizationToCampaign(org.id, input.campaignId);
+          }
+
+          results.push({ name, domain, url: result.url, description });
+        }
+
+        return {
+          companies: results,
+          totalFound: searchResponse.resultCount,
+          newCompanies: results.length,
+          duplicatesSkipped,
+          directoriesFiltered,
+          query: input.query,
+        };
+      },
+    );
   },
 });
 
