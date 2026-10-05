@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   paid: vi.fn(),
+  existing: vi.fn(),
   holds: vi.fn(),
   session: vi.fn(),
   mx: vi.fn(),
@@ -16,7 +17,7 @@ const h = vi.hoisted(() => ({
   db: { from: vi.fn() },
 }));
 vi.mock("@/lib/auth/workspace", () => ({ isHostedMode: () => true }));
-vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid }));
+vi.mock("@/lib/billing/paid-action", () => ({ executePaidAction: h.paid, hasPaidAction: h.existing }));
 vi.mock("@/lib/tools/ownership", async (original) => ({
   ...(await original<object>()),
   toolSession: h.session,
@@ -45,6 +46,7 @@ const lookup = (opts = {}) =>
   );
 beforeEach(() => {
   vi.clearAllMocks();
+  h.existing.mockResolvedValue(false);
   h.person.work_email = null;
   h.person.personal_email = null;
   h.person.work_email_source = null;
@@ -141,4 +143,30 @@ it("throws on a hosted contact read failure before any reservation", async () =>
   await expect(lookup()).rejects.toThrow("Could not load contact");
   expect(h.paid).not.toHaveBeenCalled();
   expect(h.mx).not.toHaveBeenCalled();
+});
+
+it.each(["work_email", "personal_email"] as const)(
+  "replays the original paid result even when %s has since been saved",
+  async (field) => {
+    h.person[field] = "stored@example.com";
+    h.existing.mockResolvedValue(true);
+    expect(await lookup()).toMatchObject({ email: "replayed@example.com" });
+    expect(h.existing.mock.calls[0][0]).toEqual(h.paid.mock.calls[0][0]);
+    expect(h.mx).not.toHaveBeenCalled();
+  },
+);
+it("cannot report a cached address as success for unresolved billing", async () => {
+  h.person.work_email = "stored@example.com";
+  h.existing.mockResolvedValue(true);
+  h.paid.mockRejectedValue(new Error("Unresolved"));
+  await expect(lookup()).rejects.toThrow("Unresolved");
+});
+it("checks the original verification action even after an address becomes trusted", async () => {
+  h.person.work_email = "stored@example.com";
+  h.person.work_email_verification = "deliverable";
+  h.existing.mockResolvedValue(true);
+  await lookup({ revalidate: true });
+  expect(h.paid).toHaveBeenCalledWith(
+    expect.objectContaining({ kind: "email.verify" }), expect.any(Function),
+  );
 });
