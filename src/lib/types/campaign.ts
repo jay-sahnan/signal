@@ -68,6 +68,8 @@ export interface WebResearchResult {
 }
 
 export interface EnrichmentData {
+  /** Legacy freshness stamp; newer person enrichment uses last_enriched_at. */
+  enrichedAt?: string;
   searchQuery?: string;
   rawTitle?: string;
   text?: string;
@@ -269,6 +271,7 @@ export interface CampaignContact {
   twitter_url: string | null;
   enrichment_status: "pending" | "in_progress" | "enriched" | "failed";
   enrichment_data: EnrichmentData;
+  last_enriched_at?: string | null;
   outreach_status:
     | "not_contacted"
     | "queued"
