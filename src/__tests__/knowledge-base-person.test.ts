@@ -140,3 +140,12 @@ it("fails closed on freshness read errors when billing requires a reliable answe
   );
   await expect(isRecentlyEnriched("people", "person")).resolves.toBe(false);
 });
+
+it.each(["failed", "in_progress"])("does not treat %s contact data as a successful fresh cache", async (status) => {
+  people = [{ id: "person", enrichment_status: status, enrichment_data: {}, last_enriched_at: new Date().toISOString() }];
+  expect(await isRecentlyEnriched("people", "person", 7, true)).toBe(false);
+});
+it("still reuses recently completed contact data", async () => {
+  people = [{ id: "person", enrichment_status: "enriched", enrichment_data: {}, last_enriched_at: new Date().toISOString() }];
+  expect(await isRecentlyEnriched("people", "person", 7, true)).toBe(true);
+});
