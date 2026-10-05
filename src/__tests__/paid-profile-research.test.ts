@@ -164,5 +164,5 @@ it("finishes an unstarted reservation at zero charge when all profile URLs were 
   expect(await (await POST(request())).json()).toHaveProperty("error");
   expect(h.research).not.toHaveBeenCalled();
   expect(h.rpc).toHaveBeenCalledWith("finish_serialized_credit_result", expect.objectContaining({ p_charged: 0 }));
-  expect(h.rpc.mock.calls.some(([name]) => name === "mark_credit_operation_uncertain")).toBe(false);
+  expect(h.rpc.mock.calls.some(([name, args]) => name === "finish_credit_operation" && args.p_state === "uncertain")).toBe(false);
 });
