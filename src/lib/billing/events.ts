@@ -1,19 +1,16 @@
 import type Stripe from "stripe";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "./stripe";
-import { reconcileCustomer } from "./subscriptions";
+import { fulfillCreditSession } from "./prepaid-fulfillment";
 
 const riskEvents = new Set([
   "charge.refunded",
   "charge.dispute.created",
   "radar.early_fraud_warning.created",
 ]);
-const invoiceEvents = new Set([
-  "invoice.paid",
-  "invoice.payment_failed",
-  "invoice.voided",
-  "invoice.marked_uncollectible",
-  "invoice.payment_action_required",
+const checkoutEvents = new Set([
+  "checkout.session.completed",
+  "checkout.session.async_payment_succeeded",
 ]);
 const objectId = (value: string | { id: string } | null | undefined) =>
   typeof value === "string" ? value : value?.id;
@@ -21,13 +18,10 @@ const objectId = (value: string | { id: string } | null | undefined) =>
 /** Accept only SDK-verified events. Keep raw payment data out of local storage. */
 export async function processBillingEvent(event: Stripe.Event): Promise<void> {
   const risk = riskEvents.has(event.type);
-  if (
-    !risk &&
-    !invoiceEvents.has(event.type) &&
-    !event.type.startsWith("customer.subscription.")
-  )
-    return;
+  const checkout = checkoutEvents.has(event.type);
+  if (!risk && !checkout) return;
   const object = event.data.object as unknown as {
+    id: string;
     customer?: string | { id: string };
     charge?: string | { id: string };
   };
@@ -40,7 +34,10 @@ export async function processBillingEvent(event: Stripe.Event): Promise<void> {
       (await getStripe().charges.retrieve(chargeId)).customer,
     );
   }
-  if (!customerId) return; // Non-customer invoice/charge outside subscription billing.
+  if (!customerId) {
+    if (checkout) await fulfillCreditSession(object.id);
+    return; // Non-customer charges outside Signal billing.
+  }
   const db = getAdminClient();
   const { error: insertError } = await db.from("billing_events").upsert(
     {
@@ -65,7 +62,7 @@ export async function processBillingEvent(event: Stripe.Event): Promise<void> {
       .eq("stripe_customer_id", customerId);
     if (error) throw new Error("Cannot apply billing hold");
   }
-  await reconcileCustomer(customerId);
+  if (checkout) await fulfillCreditSession(object.id);
   const { error } = await db
     .from("billing_events")
     .update({ processed_at: new Date().toISOString() })
