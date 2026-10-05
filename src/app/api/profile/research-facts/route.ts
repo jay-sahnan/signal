@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { z } from "zod";
+import { executePaidAction } from "@/lib/billing/paid-action";
+import { CreditExecutionError } from "@/lib/billing/credit-execution";
 
 import { loadAllSenderFacts } from "@/lib/sender-facts";
-import { dedupeFacts, researchSender } from "@/lib/services/sender-research";
+import {
+  dedupeFacts,
+  hostOf,
+  researchSender,
+} from "@/lib/services/sender-research";
 import { getSupabaseAndUser } from "@/lib/supabase/server";
 import type { UserProfile } from "@/lib/types/profile";
 
@@ -50,53 +56,72 @@ export async function POST(request: Request) {
     .eq("id", parsed.data.profileId)
     .maybeSingle();
 
-  if (!profile) {
+  if (!profile || profile.user_id !== user.id) {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  const result = await researchSender(profile as UserProfile, user.id);
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
-  }
+  const urls = [
+    profile.linkedin_url,
+    profile.personal_url,
+    profile.company_url,
+    profile.twitter_url,
+  ];
+  if (!urls.some((url) => typeof url === "string" && url.trim() && hostOf(url)))
+    return NextResponse.json(
+      { error: "Add a profile URL before researching." },
+      { status: 400 },
+    );
 
-  // Dedupe against the FULL bank, and refuse on a failed read: an empty or
-  // truncated baseline re-inserts every fact that already exists, bloating
-  // the bank fed into every composed email.
-  const existingRes = await loadAllSenderFacts(supabase, profile.id);
-  if (!existingRes.ok) {
+  try {
+    const output = await executePaidAction(
+      {
+        identity: { userId: user.id, source: "web" },
+        key: request.headers.get("Idempotency-Key"),
+        kind: "profile.research",
+        request: {
+          profileId: profile.id,
+          name: profile.name ?? null,
+          companyName: profile.company_name ?? null,
+          urls: urls.map((url) => url ?? null),
+        },
+      },
+      async () => {
+        const result = await researchSender(profile as UserProfile, user.id);
+        if (!result.ok) throw new Error(result.error);
+        const existingRes = await loadAllSenderFacts(supabase, profile.id);
+        if (!existingRes.ok) throw new Error("Existing fact bank unavailable");
+        const survivors = dedupeFacts(result.facts, existingRes.facts);
+        const skippedAsDuplicates = result.facts.length - survivors.length;
+        if (survivors.length === 0) return { added: 0, skippedAsDuplicates };
+        const { data: inserted, error } = await supabase
+          .from("sender_facts")
+          .insert(
+            survivors.map((f) => ({
+              user_id: user.id,
+              profile_id: profile.id,
+              category: f.category,
+              fact: f.fact,
+              source: "research",
+            })),
+          )
+          .select("id");
+        if (error) throw new Error("Could not save researched facts");
+        return {
+          added: inserted?.length ?? survivors.length,
+          skippedAsDuplicates,
+        };
+      },
+    );
+    return NextResponse.json(output);
+  } catch (error) {
     return NextResponse.json(
       {
-        error: `Could not load the existing fact bank (${existingRes.error}), so nothing was saved: inserting without it would duplicate facts. Retry.`,
+        error:
+          error instanceof CreditExecutionError
+            ? error.message
+            : "Research could not be completed. Retry with the same request; contact support if it remains pending.",
       },
-      { status: 500 },
+      { status: error instanceof CreditExecutionError ? error.status : 503 },
     );
   }
-  const survivors = dedupeFacts(result.facts, existingRes.facts);
-  const skippedAsDuplicates = result.facts.length - survivors.length;
-
-  if (survivors.length === 0) {
-    return NextResponse.json({ added: 0, skippedAsDuplicates });
-  }
-
-  const { data: inserted, error } = await supabase
-    .from("sender_facts")
-    .insert(
-      survivors.map((f) => ({
-        user_id: user.id,
-        profile_id: profile.id,
-        category: f.category,
-        fact: f.fact,
-        source: "research",
-      })),
-    )
-    .select("id");
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({
-    added: inserted?.length ?? survivors.length,
-    skippedAsDuplicates,
-  });
 }

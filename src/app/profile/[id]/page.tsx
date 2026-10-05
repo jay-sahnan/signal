@@ -577,15 +577,27 @@ function FactBankSection({
     setResearchNote(null);
     setResearchError(null);
     try {
+      if (!userId) throw new Error("Sign in before researching.");
+      // Keep the same operation across retries and reloads until success.
+      const storageKey = `signal:research:${userId}:${profileId}`;
+      let operationKey = sessionStorage.getItem(storageKey);
+      if (!operationKey) {
+        operationKey = crypto.randomUUID();
+        sessionStorage.setItem(storageKey, operationKey);
+      }
       const res = await apiFetch("/api/profile/research-facts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": operationKey,
+        },
         body: JSON.stringify({ profileId }),
       });
       const json = (await res.json()) as { added?: number; error?: string };
       if (!res.ok) {
         setResearchError(json.error ?? "Research failed");
       } else {
+        sessionStorage.removeItem(storageKey);
         // A failed refetch keeps the current list on screen: wiping it right
         // after "+N facts added" makes research look like it deleted the bank.
         try {
