@@ -33,7 +33,7 @@ it("reserves and starts before work, then settles once with its replayable resul
   const work = vi.fn(async () => {
     expect(h.rpc.mock.calls.map((c) => c[0])).toEqual([
       "reserve_credit_quote",
-      "start_credit_operation",
+      "claim_credit_execution",
     ]);
     expect(getCurrentIdentity()?.operationId).toBe("operation");
     return { found: 2 };
@@ -159,4 +159,22 @@ it("sends the exact bounded serialized result, avoiding JSONB numeric expansion"
     "finish_serialized_credit_result",
     expect.objectContaining({ p_result: JSON.stringify(result) }),
   );
+});
+it("confirms a lost start response with the same private execution token before work", async () => {
+  let starts = 0;
+  h.rpc.mockImplementation(async (name) => {
+    if (name === "reserve_credit_quote")
+      return { data: { id: "operation", state: "reserved", credits: 5 } };
+    if (name === "claim_credit_execution" && ++starts === 1)
+      throw new Error("response lost");
+    return { data: true };
+  });
+  const work = vi.fn(async () => ({ ok: true }));
+  await executeWithCredits(input, work);
+  const calls = h.rpc.mock.calls.filter(
+    ([name]) => name === "claim_credit_execution",
+  );
+  expect(calls).toHaveLength(2);
+  expect(calls[0][1].p_attempt).toBe(calls[1][1].p_attempt);
+  expect(work).toHaveBeenCalledTimes(1);
 });

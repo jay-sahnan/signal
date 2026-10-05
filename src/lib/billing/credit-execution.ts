@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { type Identity, runWithIdentity } from "@/lib/auth/identity";
 import { isHostedMode } from "@/lib/auth/workspace";
 import { getAdminClient } from "@/lib/supabase/admin";
@@ -93,11 +93,23 @@ export async function executeWithCredits<T>(
       "Operation already started or closed; check its outcome before retrying",
       409,
     );
-  const started = await db.rpc("start_credit_operation", {
-    p_id: op.id,
-    p_user: identity.userId,
-  });
-  if (started.error || started.data !== true)
+  const attempt = randomUUID();
+  let started = false;
+  for (let confirmation = 0; confirmation < 2; confirmation++) {
+    try {
+      const receipt = await db.rpc("claim_credit_execution", {
+        p_id: op.id,
+        p_user: identity.userId,
+        p_attempt: attempt,
+      });
+      if (receipt.error) continue;
+      started = receipt.data === true;
+      break;
+    } catch {
+      // The database may have committed. Confirm only this invocation's token.
+    }
+  }
+  if (!started)
     throw new CreditExecutionError(
       "Operation could not start; no provider work was run",
       409,
